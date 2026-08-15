@@ -189,6 +189,8 @@ set(ayugram_files
         ayu/ui/boxes/donate_info_box.h
         ayu/ui/boxes/plugin_info_box.cpp
         ayu/ui/boxes/plugin_info_box.h
+        ayu/ui/boxes/forwarder_box.cpp
+        ayu/ui/boxes/forwarder_box.h
         ayu/ui/components/image_view.cpp
         ayu/ui/components/image_view.h
         ayu/ui/components/icon_picker.cpp
@@ -223,6 +225,12 @@ set(ayugram_files
         ayu/features/forward/ayu_forward_rich.h
         ayu/features/forward/ayu_sync.cpp
         ayu/features/forward/ayu_sync.h
+        ayu/features/forward/forwarder_engine.cpp
+        ayu/features/forward/forwarder_engine.h
+        ayu/features/forward/forwarder_log.cpp
+        ayu/features/forward/forwarder_log.h
+        ayu/features/forward/forwarder_state.cpp
+        ayu/features/forward/forwarder_state.h
         ayu/features/translator/ayu_translator.cpp
         ayu/features/translator/ayu_translator.h
         ayu/features/translator/ayu_translate_provider.cpp
@@ -2519,6 +2527,7 @@ if (MSVC)
     target_link_libraries(Telegram
     PRIVATE
         delayimp
+        Dnsapi
     )
     target_link_options(Telegram
     PRIVATE

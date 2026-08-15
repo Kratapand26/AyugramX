@@ -14,6 +14,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "boxes/star_gift_box.h"
 #include "chat_helpers/compose/compose_show.h"
 #include "chat_helpers/message_field.h"
+#include "ayu/ui/boxes/forwarder_box.h"
 #include "chat_helpers/share_message_phrase_factory.h"
 #include "ui/basic_click_handlers.h"
 #include "ui/controls/userpic_button.h"
@@ -1892,6 +1893,14 @@ void Filler::fillHistoryActions() {
 	addViewDiscussion();
 	addDirectMessages();
 	addExportChat();
+
+	// AyuGram Auto-Forwarder Hook
+	_addAction(
+		"Auto-Forwarder",
+		[controller = _controller, peer = _peer, topic = _topic] {
+			AyuForwarder::ForwarderBox::Show(controller, peer, topic ? topic->rootId().bare : 0);
+		},
+		&st::menuIconShare);
 	addTranslate();
 	addReport();
 	addClearHistory();
@@ -1942,6 +1951,14 @@ void Filler::fillRepliesActions() {
 	addCreateTodoList();
 	addToggleTopicClosed();
 	addDeleteTopic();
+
+	// AyuGram Auto-Forwarder Hook
+	_addAction(
+		"Auto-Forwarder",
+		[controller = _controller, peer = _peer, topic = _topic] {
+			AyuForwarder::ForwarderBox::Show(controller, peer, topic ? topic->rootId().bare : 0);
+		},
+		&st::menuIconShare);
 }
 
 void Filler::fillScheduledActions() {

@@ -124,3 +124,47 @@ ayuServiceTimeBadgeVerticalPadding: 2px;
 ayuServiceTimeBadgeGap: 8px;
 ayuServiceTimeBadgeTrailingInset: 3px;
 ayuServiceTimeBadgeLastLineWidthAdd: 9px;
+
+forwarderCompactInputField: InputField(defaultInputField) {
+	textMargins: margins(8px, 6px, 8px, 4px);
+	placeholderScale: 0.;
+	heightMin: 36px;
+	heightMax: 36px;
+}
+
+// --- Auto-Forwarder redesigned box ---
+
+forwarderBoxWidth: 520px;
+
+forwarderFieldTitle: FlatLabel(defaultFlatLabel) {
+	style: TextStyle(defaultTextStyle) {
+		font: font(13px semibold);
+	}
+	textFg: windowBoldFg;
+}
+forwarderFieldTitlePadding: margins(24px, 10px, 24px, 4px);
+
+forwarderFieldHint: FlatLabel(defaultFlatLabel) {
+	align: align(top);
+	style: TextStyle(defaultTextStyle) {
+		font: font(11px);
+	}
+	textFg: windowSubTextFg;
+}
+forwarderFieldHintPadding: margins(24px, 0px, 24px, 0px);
+
+forwarderInputField: InputField(defaultInputField) {
+	textMargins: margins(12px, 8px, 12px, 6px);
+	placeholderScale: 0.;
+	heightMin: 38px;
+	heightMax: 38px;
+	textBg: windowBgOver;
+	textBgActive: windowBgOver;
+	border: 0px;
+	borderActive: 0px;
+	borderRadius: 6px;
+}
+forwarderMultilineInput: InputField(forwarderInputField) {
+	heightMin: 56px;
+	heightMax: 100px;
+}
