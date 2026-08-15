@@ -81,7 +81,7 @@ ChatFilter::ChatFilter(
 ChatFilter ChatFilter::FromTL(
 		const MTPDialogFilter &data,
 		not_null<Session*> owner) {
-	return data.match([&](const MTPDdialogFilter &data) {
+	auto result = data.match([&](const MTPDdialogFilter &data) {
 		const auto flags = (data.is_contacts() ? Flag::Contacts : Flag(0))
 			| (data.is_non_contacts() ? Flag::NonContacts : Flag(0))
 			| (data.is_groups() ? Flag::Groups : Flag(0))
@@ -182,6 +182,22 @@ ChatFilter ChatFilter::FromTL(
 			std::move(pinned),
 			{});
 	});
+
+	// AyuGram: Apply local folder color override for non-premium users.
+	// When the server strips color for non-premium accounts,
+	// restore it from locally persisted settings.
+	if (!result.colorIndex() && !(owner->session().user()->flags() & UserDataFlag::Premium)) {
+		const auto &settings = AyuSettings::getInstance();
+		const auto localColor = settings.customFolderColor(
+			owner->session().userId().bare,
+			result.id());
+		if (localColor) {
+			result = result.withColorIndex(
+				std::make_optional(static_cast<uint8>(*localColor)));
+		}
+	}
+
+	return result;
 }
 
 ChatFilter ChatFilter::withId(FilterId id) const {
@@ -447,8 +463,26 @@ void ChatFilters::setPreloaded(
 		const QVector<MTPDialogFilter> &result,
 		bool tagsEnabled) {
 	_loadRequestId = -1;
-	_tagsEnabled = tagsEnabled;
+
+	// AyuGram: Restore persisted local tags override on startup.
+	const auto &settings = AyuSettings::getInstance();
+	const auto localTagsEnabled = _tagsLocalOverride
+		|| settings.localFolderTagsEnabled(_owner->session().userId().bare);
+	if (localTagsEnabled) {
+		_tagsLocalOverride = true;
+	}
+
+	if (!_tagsLocalOverride) {
+		_tagsEnabled = tagsEnabled;
+	} else {
+		_tagsEnabled = true;
+	}
 	received(result);
+	// AyuGram: Re-force after received() to guard against any
+	// side-effects that might reset _tagsEnabled.
+	if (_tagsLocalOverride) {
+		_tagsEnabled = true;
+	}
 	crl::on_main(&_owner->session(), [=] {
 		if (_loadRequestId == -1) {
 			_loadRequestId = 0;
@@ -473,8 +507,25 @@ void ChatFilters::load(bool force) {
 	api.request(_loadRequestId).cancel();
 	_loadRequestId = api.request(MTPmessages_GetDialogFilters(
 	)).done([=](const MTPmessages_DialogFilters &result) {
-		_tagsEnabled = result.data().is_tags_enabled();
+		// AyuGram: Restore persisted local tags override.
+		const auto &settings = AyuSettings::getInstance();
+		const auto localTagsEnabled = _tagsLocalOverride
+			|| settings.localFolderTagsEnabled(_owner->session().userId().bare);
+		if (localTagsEnabled) {
+			_tagsLocalOverride = true;
+		}
+
+		if (!_tagsLocalOverride) {
+			_tagsEnabled = result.data().is_tags_enabled();
+		} else {
+			_tagsEnabled = true;
+		}
 		received(result.data().vfilters().v);
+		// AyuGram: Re-force after received() to guard against any
+		// side-effects that might reset _tagsEnabled.
+		if (_tagsLocalOverride) {
+			_tagsEnabled = true;
+		}
 		_loadRequestId = 0;
 	}).fail([=] {
 		_loadRequestId = 0;
@@ -501,6 +552,7 @@ void ChatFilters::requestToggleTags(bool value, Fn<void()> fail) {
 	if (_toggleTagsRequestId) {
 		return;
 	}
+	_tagsLocalOverride = false;
 	_toggleTagsRequestId = _owner->session().api().request(
 		MTPmessages_ToggleDialogFilterTags(MTP_bool(value))
 	).done([=](const MTPBool &result) {
@@ -512,6 +564,16 @@ void ChatFilters::requestToggleTags(bool value, Fn<void()> fail) {
 		LOG(("API Error: Toggle Tags - %1").arg(message));
 		fail();
 	}).send();
+}
+
+void ChatFilters::requestToggleTagsLocal(bool value) {
+	_tagsLocalOverride = value;
+	_tagsEnabled = value;
+
+	// AyuGram: Persist the local override so it survives app restart.
+	auto &settings = AyuSettings::getInstance();
+	settings.setLocalFolderTagsEnabled(
+		_owner->session().userId().bare, value);
 }
 
 void ChatFilters::received(const QVector<MTPDialogFilter> &list) {

@@ -354,6 +354,12 @@ public:
 	[[nodiscard]] bool singleCornerRadius() const { return _singleCornerRadius.current(); }
 	[[nodiscard]] bool streamerMode() const { return _streamerMode.current(); }
 
+	// AyuGram: Local folder tags for non-premium users
+	[[nodiscard]] bool localFolderTagsEnabled(uint64 userId) const;
+	void setLocalFolderTagsEnabled(uint64 userId, bool val);
+	[[nodiscard]] std::optional<int> customFolderColor(uint64 userId, int filterId) const;
+	void setCustomFolderColor(uint64 userId, int filterId, std::optional<int> colorIndex);
+
 	void setSaveDeletedMessages(bool val);
 	void setSaveMessagesHistory(bool val);
 	void setSaveForBots(bool val);
@@ -716,6 +722,13 @@ private:
 	std::map<uint64, std::unique_ptr<GhostModeAccountSettings>> _ghostAccounts;
 
 	MessageShotSettings _messageShotSettings;
+
+	// AyuGram: Per-account local folder tag settings
+	struct LocalFolderTagSettings {
+		bool enabled = false;
+		std::map<int, int> colors; // filterId -> colorIndex
+	};
+	std::map<uint64, LocalFolderTagSettings> _localFolderTags;
 };
 
 void to_json(nlohmann::json &j, const AyuSettings &s);

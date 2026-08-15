@@ -1069,6 +1069,36 @@ void AyuSettings::setStreamerMode(bool val) {
 	save();
 }
 
+bool AyuSettings::localFolderTagsEnabled(uint64 userId) const {
+	const auto it = _localFolderTags.find(userId);
+	return (it != _localFolderTags.end()) ? it->second.enabled : false;
+}
+
+void AyuSettings::setLocalFolderTagsEnabled(uint64 userId, bool val) {
+	_localFolderTags[userId].enabled = val;
+	save();
+}
+
+std::optional<int> AyuSettings::customFolderColor(uint64 userId, int filterId) const {
+	const auto acctIt = _localFolderTags.find(userId);
+	if (acctIt == _localFolderTags.end()) return std::nullopt;
+	const auto colorIt = acctIt->second.colors.find(filterId);
+	if (colorIt == acctIt->second.colors.end()) return std::nullopt;
+	return colorIt->second;
+}
+
+void AyuSettings::setCustomFolderColor(uint64 userId, int filterId, std::optional<int> colorIndex) {
+	if (colorIndex) {
+		_localFolderTags[userId].colors[filterId] = *colorIndex;
+	} else {
+		auto acctIt = _localFolderTags.find(userId);
+		if (acctIt != _localFolderTags.end()) {
+			acctIt->second.colors.erase(filterId);
+		}
+	}
+	save();
+}
+
 void to_json(nlohmann::json &j, const AyuSettings &s) {
 	auto ghostAccounts = nlohmann::json::object();
 	for (const auto &[key, value] : s._ghostAccounts) {
@@ -1167,6 +1197,20 @@ void to_json(nlohmann::json &j, const AyuSettings &s) {
 		{"streamerMode", s._streamerMode.current()},
 		{"messageShotSettings", s._messageShotSettings}
 	};
+
+	// AyuGram: Serialize local folder tag settings
+	auto folderTags = nlohmann::json::object();
+	for (const auto &[userId, settings] : s._localFolderTags) {
+		auto colors = nlohmann::json::object();
+		for (const auto &[filterId, colorIdx] : settings.colors) {
+			colors[std::to_string(filterId)] = colorIdx;
+		}
+		folderTags[std::to_string(userId)] = nlohmann::json{
+			{"enabled", settings.enabled},
+			{"colors", colors}
+		};
+	}
+	j["localFolderTags"] = folderTags;
 }
 
 void from_json(const nlohmann::json &j, AyuSettings &s) {
@@ -1272,5 +1316,20 @@ void from_json(const nlohmann::json &j, AyuSettings &s) {
 
 	if (j.contains("messageShotSettings") && j["messageShotSettings"].is_object()) {
 		j["messageShotSettings"].get_to(s._messageShotSettings);
+	}
+
+	// AyuGram: Deserialize local folder tag settings
+	if (j.contains("localFolderTags") && j["localFolderTags"].is_object()) {
+		s._localFolderTags.clear();
+		for (auto &[key, value] : j["localFolderTags"].items()) {
+			AyuSettings::LocalFolderTagSettings tagSettings;
+			tagSettings.enabled = value.value("enabled", false);
+			if (value.contains("colors") && value["colors"].is_object()) {
+				for (auto &[fKey, fVal] : value["colors"].items()) {
+					tagSettings.colors[std::stoi(fKey)] = fVal.get<int>();
+				}
+			}
+			s._localFolderTags[std::stoull(key)] = std::move(tagSettings);
+		}
 	}
 }

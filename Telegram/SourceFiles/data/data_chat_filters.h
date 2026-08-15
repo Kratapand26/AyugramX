@@ -215,6 +215,7 @@ public:
 	[[nodiscard]] rpl::producer<bool> tagsEnabledValue() const;
 	[[nodiscard]] rpl::producer<bool> tagsEnabledChanges() const;
 	void requestToggleTags(bool value, Fn<void()> fail);
+	void requestToggleTagsLocal(bool value);
 
 private:
 	struct MoreChatsData {
@@ -254,6 +255,7 @@ private:
 	crl::time _suggestedLastReceived = 0;
 
 	rpl::variable<bool> _tagsEnabled = false;
+	bool _tagsLocalOverride = false;
 
 	std::deque<FilterId> _exceptionsToLoad;
 	mtpRequestId _exceptionsLoadRequestId = 0;

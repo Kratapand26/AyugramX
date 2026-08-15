@@ -51,6 +51,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "styles/style_menu_icons.h"
 #include "styles/style_settings.h"
 #include "styles/style_stickers_box.h"
+#include "ayu/ayu_settings.h"
 
 namespace Settings {
 namespace {
@@ -658,6 +659,19 @@ not_null<Ui::VerticalLayout*> SetupFoldersList(
 					updated = row.filter;
 				}
 			}
+
+			// AyuGram: Save color locally for non-premium users
+			// so it persists after server strips it on next refresh.
+			if (!removed && !session->premium()) {
+				auto &ayuSettings = AyuSettings::getInstance();
+				ayuSettings.setCustomFolderColor(
+					session->userId().bare,
+					row.filter.id(),
+					row.filter.colorIndex()
+						? std::make_optional(static_cast<int>(*row.filter.colorIndex()))
+						: std::nullopt);
+			}
+
 			const auto tl = removed
 				? MTPDialogFilter()
 				: row.filter.tl(newId);
@@ -994,10 +1008,6 @@ void BuildFoldersListSection(
 }
 
 void BuildTagsSection(SectionBuilder &builder, not_null<FoldersState*> state) {
-	if (!builder.session()->premiumPossible()) {
-		return;
-	}
-
 	builder.addDivider();
 	builder.addSkip();
 
@@ -1013,7 +1023,6 @@ void BuildTagsSection(SectionBuilder &builder, not_null<FoldersState*> state) {
 			Fn<void()> sendCallback;
 		};
 
-		auto premium = Data::AmPremiumValue(session);
 		const auto tagsButton = content->add(
 			object_ptr<Ui::SettingsButton>(
 				content,
@@ -1024,14 +1033,8 @@ void BuildTagsSection(SectionBuilder &builder, not_null<FoldersState*> state) {
 		}
 		const auto tagsState = tagsButton->lifetime().make_state<TagsState>();
 		tagsButton->toggleOn(rpl::merge(
-			rpl::combine(
-				session->data().chatsFilters().tagsEnabledValue(),
-				rpl::duplicate(premium),
-				rpl::mappers::_1 && rpl::mappers::_2),
+			session->data().chatsFilters().tagsEnabledValue(),
 			tagsState->tagsTurnOff.events()));
-		rpl::duplicate(premium) | rpl::on_next([=](bool value) {
-			tagsButton->setToggleLocked(!value);
-		}, tagsButton->lifetime());
 
 		const auto send = [=,
 				weak = base::make_weak(tagsButton)](bool checked) {
@@ -1044,26 +1047,20 @@ void BuildTagsSection(SectionBuilder &builder, not_null<FoldersState*> state) {
 
 		tagsButton->toggledValue(
 		) | rpl::filter([=](bool checked) {
-			const auto premium = session->premium();
-			if (checked && !premium) {
-				ShowPremiumPreviewToBuy(controller, PremiumFeature::FilterTags);
-				tagsState->tagsTurnOff.fire(false);
-			}
-			if (!premium) {
-				state->tagsButtonEnabled.fire(false);
-			} else {
-				state->tagsButtonEnabled.fire_copy(checked);
-			}
-			const auto proceed = premium
-				&& (checked != session->data().chatsFilters().tagsEnabled());
-			if (!proceed) {
-				tagsState->requestTimer.cancel();
-			}
-			return proceed;
+			state->tagsButtonEnabled.fire_copy(checked);
+			return checked != session->data().chatsFilters().tagsEnabled();
 		}) | rpl::on_next([=](bool v) {
-			tagsState->sendCallback = [=] { send(v); };
+			if (!(session->user()->flags() & UserDataFlag::Premium)) {
+				// Non-premium (or local-only premium): apply immediately locally
+				session->data().chatsFilters().requestToggleTagsLocal(v);
+				return;
+			}
+			const auto doToggle = [=] {
+				send(v);
+			};
+			tagsState->sendCallback = doToggle;
 			tagsState->requestTimer.cancel();
-			tagsState->requestTimer.setCallback([=] { send(v); });
+			tagsState->requestTimer.setCallback(doToggle);
 			tagsState->requestTimer.callOnce(500);
 		}, tagsButton->lifetime());
 
@@ -1080,29 +1077,16 @@ void BuildTagsSection(SectionBuilder &builder, not_null<FoldersState*> state) {
 		return SearchEntry{
 			.id = u"folders/show-tags"_q,
 			.title = tr::lng_filters_enable_tags(tr::now),
-			.keywords = { u"tags"_q, u"colors"_q, u"premium"_q },
+			.keywords = { u"tags"_q, u"colors"_q },
 		};
 	});
 
 	builder.addSkip();
 
 	builder.add([=](const WidgetContext &ctx) {
-		auto premium = Data::AmPremiumValue(session);
-		const auto about = Ui::AddDividerText(
+		Ui::AddDividerText(
 			ctx.container,
-			rpl::conditional(
-				rpl::duplicate(premium),
-				tr::lng_filters_enable_tags_about(tr::rich),
-				tr::lng_filters_enable_tags_about_premium(
-					lt_link,
-					tr::lng_effect_premium_link() | rpl::map([](QString t) {
-						return tr::link(std::move(t), u"internal:"_q);
-					}),
-					tr::rich)));
-		about->setClickHandlerFilter([=](const auto &...) {
-			Settings::ShowPremium(ctx.controller, u"folder_tags"_q);
-			return true;
-		});
+			tr::lng_filters_enable_tags_about(tr::rich));
 		return SectionBuilder::WidgetToAdd{};
 	});
 }

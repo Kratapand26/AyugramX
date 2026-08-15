@@ -48,6 +48,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ui/layers/generic_box.h"
 #include "ui/painter.h"
 #include "ui/rect.h"
+#include "ayu/ayu_settings.h"
 #include "ui/power_saving.h"
 #include "ui/vertical_list.h"
 #include "ui/widgets/buttons.h"
@@ -896,9 +897,9 @@ void EditFilterBox(
 			const auto button = Ui::CreateChild<UserpicBuilder::CircleButton>(
 				line);
 			button->resize(side, side);
-			const auto progress = isPremium
-				? (state->colorIndex.current() == i)
-				: (i == kNoTag);
+			const auto progress = (state->colorIndex.current() == i)
+				? 1.
+				: 0.;
 			button->setSelectedProgress(progress);
 			const auto color = palette(i);
 			button->setBrush(color);
@@ -939,11 +940,6 @@ void EditFilterBox(
 				}
 				state->colorIndex = now;
 			});
-			if (!session->premium()) {
-				button->setClickedCallback([w = window] {
-					ShowPremiumPreviewToBuy(w, PremiumFeature::FilterTags);
-				});
-			}
 		}
 		line->sizeValue() | rpl::on_next([=](const QSize &size) {
 			const auto totalWidth = buttons.size() * side;
@@ -961,9 +957,7 @@ void EditFilterBox(
 			icon->resize(side, side);
 			icon->paintRequest() | rpl::on_next([=] {
 				auto p = QPainter(icon);
-				(session->premium()
-					? st::windowFilterSmallRemove.icon
-					: st::historySendDisabledIcon).paintInCenter(
+				st::windowFilterSmallRemove.icon.paintInCenter(
 						p,
 						QRectF(icon->rect()),
 						st::historyPeerUserpicFg->c);
@@ -1151,6 +1145,18 @@ void EditExistingFilter(
 	}
 	const auto doneCallback = [=](const Data::ChatFilter &result) {
 		Expects(id == result.id());
+
+		// AyuGram: Save color locally for non-premium users
+		// so it persists after server strips it.
+		if (!session->premium()) {
+			auto &settings = AyuSettings::getInstance();
+			settings.setCustomFolderColor(
+				session->userId().bare,
+				id,
+				result.colorIndex()
+					? std::make_optional(static_cast<int>(*result.colorIndex()))
+					: std::nullopt);
+		}
 
 		const auto tl = result.tl();
 		session->data().chatsFilters().apply(MTP_updateDialogFilter(
