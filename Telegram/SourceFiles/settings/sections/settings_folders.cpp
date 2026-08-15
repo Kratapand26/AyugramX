@@ -20,6 +20,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "data/data_peer_values.h"
 #include "data/data_premium_limits.h"
 #include "data/data_session.h"
+#include "data/data_user.h"
 #include "history/history.h"
 #include "lang/lang_keys.h"
 #include "lottie/lottie_icon.h"
@@ -1050,7 +1051,7 @@ void BuildTagsSection(SectionBuilder &builder, not_null<FoldersState*> state) {
 			state->tagsButtonEnabled.fire_copy(checked);
 			return checked != session->data().chatsFilters().tagsEnabled();
 		}) | rpl::on_next([=](bool v) {
-			if (!(session->user()->flags() & UserDataFlag::Premium)) {
+			if (!session->user()->isPremium()) {
 				// Non-premium (or local-only premium): apply immediately locally
 				session->data().chatsFilters().requestToggleTagsLocal(v);
 				return;

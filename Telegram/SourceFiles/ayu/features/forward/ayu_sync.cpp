@@ -284,6 +284,10 @@ QString filePath(not_null<Main::Session*> session, not_null<PhotoData*> photo) {
 	return QDir(directory).filePath(filename);
 }
 
+QString filePath(not_null<Main::Session*> session, not_null<DocumentData*> document) {
+	return NextDocumentPath(session, document);
+}
+
 qint64 fileSize(const QString &path) {
 	if (path.isEmpty()) {
 		return 0;

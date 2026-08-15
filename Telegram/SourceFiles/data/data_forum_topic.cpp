@@ -917,8 +917,13 @@ Dialogs::BadgesState ForumTopic::chatListBadgesState() const {
 		Dialogs::CountInBadge::Messages,
 		Dialogs::IncludeInBadge::All);
 	if (!result.unread && _replies->inboxReadTillId() < 2) {
+		bool latestIsOutgoing = false;
+		if (const auto last = lastServerMessage()) {
+			latestIsOutgoing = last->out();
+		}
 		result.unread = (bot() || (channel() && channel()->amIn()))
-			&& (_lastKnownServerMessageId > history()->inboxReadTillId());
+			&& (_lastKnownServerMessageId > history()->inboxReadTillId())
+			&& !latestIsOutgoing;
 		result.unreadMuted = muted();
 	}
 	return result;

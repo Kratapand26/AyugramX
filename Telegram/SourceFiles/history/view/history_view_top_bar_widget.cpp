@@ -917,10 +917,10 @@ void TopBarWidget::backClicked() {
 		&& _activeChat.key.history()->peer->asChannel()
 		&& _activeChat.key.history()->peer->asChannel()->isCommunity()) {
 		_controller->closeCommunity();
-	} else if (!_controller->content()->stackIsEmpty()) {
-		_controller->showBackFromStack();
 	} else if (_controller->canGoBackInChatHistory()) {
 		_controller->goBackInChatHistory();
+	} else if (!_controller->content()->stackIsEmpty()) {
+		_controller->showBackFromStack();
 	} else {
 		_controller->showBackFromStack();
 	}
@@ -1326,14 +1326,10 @@ void TopBarWidget::updateControlsGeometry() {
 			+ fieldWidth
 			- _searchCancel->width();
 		_searchCancel->moveToLeft(cancelLeft, fieldY);
-		auto right = cancelLeft;
 		if (_jumpToDate) {
-			right -= st::dialogsCalendarTopBar.width;
-			_jumpToDate->moveToLeft(right, fieldY);
-		}
-		if (_filenameSearch) {
-			right -= st::dialogsFilenameSearch.width;
-			_filenameSearch->moveToLeft(right, fieldY);
+			_jumpToDate->moveToLeft(
+				cancelLeft - st::dialogsCalendarTopBar.width,
+				fieldY);
 		}
 		updateChooseFromUserGeometry();
 		updateSearchJumpToDateVisibility();

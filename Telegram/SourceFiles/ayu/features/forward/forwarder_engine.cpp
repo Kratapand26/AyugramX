@@ -214,7 +214,7 @@ ForwarderEngine::PreDownloadMap ForwarderEngine::batchDownloadConcurrent(
 		const auto doc = media->document();
 		if (!doc) continue; // photos don't need D/U — only documents/videos/etc.
 
-		auto path = AyuSync::filePath(session, media);
+		auto path = AyuSync::filePath(session, doc);
 		if (path.isEmpty()) continue;
 
 		// Apply filename sanitization (words_to_remove / patterns)
@@ -1305,7 +1305,9 @@ bool ForwarderEngine::forwardDownloadUpload(
 	}
 	if (!mediaItems.empty()) {
 		log.debug(QString("Pre-downloading %1 media items concurrently before send phase").arg(mediaItems.size()));
-		AyuSync::loadDocuments(session, mediaItems);
+		AyuSync::loadDocuments(session, mediaItems, [] {
+			return AyuForward::g_isForwarderCanceled.load();
+		});
 		log.debug("Pre-download phase complete. Starting send phase.");
 	} else {
 		log.debug("No media items to pre-download. Proceeding to send phase.");

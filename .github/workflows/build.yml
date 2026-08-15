@@ -211,6 +211,8 @@ jobs:
         env:
           QT: 6.11.0
           LIBS_DIR: ${{ runner.workspace }}\Libraries\win64
+          TDESKTOP_API_ID: ${{ secrets.TDESKTOP_API_ID }}
+          TDESKTOP_API_HASH: ${{ secrets.TDESKTOP_API_HASH }}
         shell: pwsh
         run: |
           $py = (Get-Command python).Source

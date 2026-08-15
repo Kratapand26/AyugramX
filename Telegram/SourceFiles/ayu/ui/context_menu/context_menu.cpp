@@ -906,7 +906,6 @@ void AddReadUntilAction(not_null<Ui::PopupMenu*> menu, HistoryItem *item) {
 	const auto readItem = group ? group->items.back().get() : item;
 	if (!readItem->isHistoryEntry()
 		|| readItem->isLocal()
-		|| readItem->out()
 		|| readItem->isDeleted()
 		|| readItem->history()->peer->isSelf()) {
 		return;

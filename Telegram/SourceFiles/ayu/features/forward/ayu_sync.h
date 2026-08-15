@@ -35,6 +35,7 @@ struct UploadedFile
 QString pathForSave(not_null<Main::Session*> session);
 QString documentFileName(not_null<DocumentData*> document);
 QString filePath(not_null<Main::Session*> session, not_null<PhotoData*> photo);
+QString filePath(not_null<Main::Session*> session, not_null<DocumentData*> document);
 qint64 fileSize(const QString &path);
 [[nodiscard]] DocumentPaths loadDocuments(
 	not_null<Main::Session*> session,

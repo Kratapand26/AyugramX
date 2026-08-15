@@ -1198,13 +1198,14 @@ bool DocumentData::waitingForAlbum() const {
 
 void DocumentData::save(
 		Data::FileOrigin origin,
-		QString toFile,
+		const QString &toFile,
 		LoadFromCloudSetting fromCloud,
 		bool autoLoading) {
+	auto actualToFile = toFile;
 
 	// AyuGram Sequential Override
-	if (!autoLoading && !toFile.isEmpty() && (!this->loading() || this->_loader == nullptr)) {
-		QFileInfo fi(toFile);
+	if (!autoLoading && !actualToFile.isEmpty() && (!this->loading() || this->_loader == nullptr)) {
+		QFileInfo fi(actualToFile);
 		QString dir = fi.absolutePath() + "/";
 		QString filename = fi.fileName();
 		
@@ -1273,29 +1274,29 @@ void DocumentData::save(
 				}
 				cleanName = QString("file_%1%2").arg(maxSeq + 1).arg(ext);
 			}
-			toFile = dir + QString::number(maxSeq + 1) + "- " + cleanName;
+			actualToFile = dir + QString::number(maxSeq + 1) + "- " + cleanName;
 		}
 	}
 	// AyuGram End
 	if (const auto media = activeMediaView(); media && media->loaded(true)) {
 		auto &l = location(true);
-		if (!toFile.isEmpty()) {
+		if (!actualToFile.isEmpty()) {
 			if (!media->bytes().isEmpty()) {
-				QFile f(toFile);
+				QFile f(actualToFile);
 				if (f.open(QIODevice::WriteOnly)) {
 					f.write(media->bytes());
 					f.close();
 				}
 
-				setLocation(Core::FileLocation(toFile));
+				setLocation(Core::FileLocation(actualToFile));
 				session().local().writeFileLocation(
 					mediaKey(),
-					Core::FileLocation(toFile));
+					Core::FileLocation(actualToFile));
 			} else if (l.accessEnable()) {
 				const auto &alreadyName = l.name();
-				if (alreadyName != toFile) {
-					QFile(toFile).remove();
-					QFile(alreadyName).copy(toFile);
+				if (alreadyName != actualToFile) {
+					QFile(actualToFile).remove();
+					QFile(alreadyName).copy(actualToFile);
 				}
 				l.accessDisable();
 			}
@@ -1304,7 +1305,7 @@ void DocumentData::save(
 	}
 
 	if (_loader) {
-		if (!_loader->setFileName(toFile)) {
+		if (!_loader->setFileName(actualToFile)) {
 			cancel();
 		}
 	}
@@ -1326,7 +1327,7 @@ void DocumentData::save(
 				Data::DocumentCacheKey(_dc, id),
 				mediaKey(),
 				std::move(reader),
-				toFile,
+				actualToFile,
 				size,
 				locationType(),
 				(saveToCache() ? LoadToCacheAsWell : LoadToFileOnly),
@@ -1346,7 +1347,7 @@ void DocumentData::save(
 			_loader = std::make_unique<webFileLoader>(
 				&session(),
 				_url,
-				toFile,
+				actualToFile,
 				fromCloud,
 				autoLoading,
 				cacheTag());
@@ -1363,7 +1364,7 @@ void DocumentData::save(
 						MTP_string())),
 				origin,
 				locationType(),
-				toFile,
+				actualToFile,
 				size,
 				size,
 				(saveToCache() ? LoadToCacheAsWell : LoadToFileOnly),

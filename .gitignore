@@ -67,6 +67,9 @@ settings.local.json
 .cursor/*
 !.cursor/rules/
 
+# Agent local configuration and guides
+.agents/
+
 # AI work folder (session-specific, not for version control)
 .ai
 
@@ -75,3 +78,9 @@ settings.local.json
 
 # Project specific
 Telegram/SourceFiles/_other/packer_private.h
+
+# AI Agent handoff notes
+HANDOFF.md
+*.handoff.md
+HANDOFF*
+

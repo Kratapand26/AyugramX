@@ -8,6 +8,13 @@ option(TDESKTOP_API_TEST "Use test API credentials." OFF)
 set(TDESKTOP_API_ID "0" CACHE STRING "Provide 'api_id' for the Telegram API access.")
 set(TDESKTOP_API_HASH "" CACHE STRING "Provide 'api_hash' for the Telegram API access.")
 
+if ((NOT TDESKTOP_API_ID OR TDESKTOP_API_ID STREQUAL "0") AND DEFINED ENV{TDESKTOP_API_ID})
+    set(TDESKTOP_API_ID "$ENV{TDESKTOP_API_ID}" CACHE STRING "Provide 'api_id' for the Telegram API access." FORCE)
+endif()
+if ((NOT TDESKTOP_API_HASH OR TDESKTOP_API_HASH STREQUAL "") AND DEFINED ENV{TDESKTOP_API_HASH})
+    set(TDESKTOP_API_HASH "$ENV{TDESKTOP_API_HASH}" CACHE STRING "Provide 'api_hash' for the Telegram API access." FORCE)
+endif()
+
 if (TDESKTOP_API_TEST)
     set(TDESKTOP_API_ID 17349)
     set(TDESKTOP_API_HASH 344583e45741c457fe1862106095a5eb)

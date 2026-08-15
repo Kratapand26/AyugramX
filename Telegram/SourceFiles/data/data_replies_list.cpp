@@ -469,7 +469,7 @@ bool RepliesList::applyUpdate(const MessageUpdate &update) {
 	const auto added = (update.flags & Flag::ReplyToTopAdded);
 	const auto i = ranges::lower_bound(_list, id, std::greater<>());
 	if (update.flags & Flag::Destroyed) {
-		if (!added && inThread) {
+		if (!added && inThread && !update.item->out()) {
 			changeUnreadCountByPost(id, -1);
 		}
 		if (i == end(_list) || *i != id) {
@@ -487,7 +487,7 @@ bool RepliesList::applyUpdate(const MessageUpdate &update) {
 	} else if (!inThread) {
 		return false;
 	}
-	if (added) {
+	if (added && !update.item->out()) {
 		changeUnreadCountByPost(id, 1);
 	}
 	if (_skippedAfter != 0
@@ -808,7 +808,18 @@ void RepliesList::setInboxReadTill(
 	const auto wasUnreadCount = _unreadCount;
 	if (_unreadCount.current() != unreadCount
 		&& (changed || unreadCount.has_value())) {
-		setUnreadCount(unreadCount);
+		
+		bool ignoreUnreadCount = false;
+		if (!changed && unreadCount.has_value() && unreadCount.value() > 0 && _unreadCount.current().has_value()) {
+			const auto &ghost = AyuSettings::ghost(&_history->session());
+			if (!ghost.sendReadMessages()) {
+				ignoreUnreadCount = true;
+			}
+		}
+
+		if (!ignoreUnreadCount) {
+			setUnreadCount(unreadCount);
+		}
 	}
 }
 
@@ -894,7 +905,13 @@ std::optional<int> RepliesList::computeUnreadCountLocally(
 		|| (fullLoaded && _list.empty());
 	if (allUnread && fullLoaded) {
 		// Should not happen too often unless the list is empty.
-		return int(_list.size());
+		int unreadCount = 0;
+		for (auto id : _list) {
+			if (const auto item = _history->owner().message(_history->peer->id, id)) {
+				if (!item->out()) unreadCount++;
+			}
+		}
+		return unreadCount;
 	} else if (frontLoaded && !_list.empty() && readTillId >= _list.front()) {
 		// Always "count by local data" if read till the end.
 		return 0;
@@ -903,8 +920,14 @@ std::optional<int> RepliesList::computeUnreadCountLocally(
 		return wasUnreadCountAfter;
 	} else if (frontLoaded && !_list.empty() && readTillId >= _list.back()) {
 		// And count by local data if it is available and read-till changed.
-		return int(ranges::lower_bound(_list, readTillId, std::greater<>())
-			- begin(_list));
+		int unreadCount = 0;
+		const auto till = ranges::lower_bound(_list, readTillId, std::greater<>());
+		for (auto i = begin(_list); i != till; ++i) {
+			if (const auto item = _history->owner().message(_history->peer->id, *i)) {
+				if (!item->out()) unreadCount++;
+			}
+		}
+		return unreadCount;
 	} else if (_list.empty()) {
 		return std::nullopt;
 	} else if (wasUnreadCountAfter.has_value()
@@ -920,7 +943,13 @@ std::optional<int> RepliesList::computeUnreadCountLocally(
 			end(_list),
 			wasReadTillId,
 			std::greater<>());
-		return std::max(*wasUnreadCountAfter - int(till - from), 0);
+		int readCount = 0;
+		for (auto i = from; i != till; ++i) {
+			if (const auto item = _history->owner().message(_history->peer->id, *i)) {
+				if (!item->out()) readCount++;
+			}
+		}
+		return std::max(*wasUnreadCountAfter - readCount, 0);
 	}
 	return std::nullopt;
 }
@@ -1011,6 +1040,8 @@ void RepliesList::sendReadTillRequest() {
 
 	const auto &ghost = AyuSettings::ghost(&_history->session());
 	if (!ghost.sendReadMessages()) {
+		_readRequestId = 0;
+		reloadUnreadCountIfNeeded();
 		return;
 	}
 

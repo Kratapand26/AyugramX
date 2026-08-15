@@ -12,6 +12,9 @@
 #include <atomic>
 
 namespace AyuForward {
+extern std::atomic<bool> g_isForwarderCanceled;
+extern std::atomic<bool> g_isForwarderRunning;
+
 bool isForwarding(const PeerId &id);
 void cancelForward(const PeerId &id, const Main::Session &session);
 std::pair<QString, QString> stateName(const PeerId &id);

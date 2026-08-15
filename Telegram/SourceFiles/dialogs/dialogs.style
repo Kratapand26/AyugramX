@@ -309,12 +309,6 @@ dialogsFilenameSearch: IconButton(dialogsCalendar) {
 	iconOver: icon {{ "menu/file", dialogsMenuIconFgOver }};
 }
 
-dialogsSearchForNarrowFilters: IconButton(dialogsMenuToggle) {
-	icon: icon {{ "top_bar_search", menuIconFg }};
-	iconOver: icon {{ "top_bar_search", menuIconFgOver }};
-	iconPosition: point(4px, 4px);
-}
-
 dialogsFilter: InputField(defaultInputField) {
 	textBg: filterInputInactiveBg;
 	textBgActive: filterInputActiveBg;

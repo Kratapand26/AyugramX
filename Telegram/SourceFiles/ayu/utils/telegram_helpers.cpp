@@ -28,6 +28,7 @@
 #include "data/data_forum.h"
 #include "data/data_forum_topic.h"
 #include "data/data_histories.h"
+#include "data/data_replies_list.h"
 #include "data/data_peer_id.h"
 #include "data/data_photo.h"
 #include "data/data_poll.h"
@@ -413,6 +414,40 @@ void readHistory(not_null<HistoryItem*> message) {
 	const auto history = message->history();
 	const auto tillId = message->id;
 
+	history->destroyUnreadBar();
+
+	// AyuGram fix: Handle forum topics separately — they use a
+	// per-topic read API, not the channel-wide MTPchannels_ReadHistory.
+	if (const auto topic = message->topic()) {
+		// Advance the topic's per-topic read watermark to exactly the
+		// selected message (NOT to the topic end), so reopening lands
+		topic->replies()->readTill(message);
+		// Also advance the channel's General read pointer so the topic's
+		// chatListBadgesState() fallback (data_forum_topic.cpp) sees a
+		// sane value and the chat-list badge/scroll stays correct.
+		history->setInboxReadTill(tillId);
+		history->updateChatListEntry();
+		AyuWorker::markAsOnline(&history->session());
+
+		// Send explicit read request to server, bypassing ghost mode blocking
+		history->session().api().request(MTPmessages_ReadDiscussion(
+			history->peer->input(),
+			MTP_int(topic->rootId()),
+			MTP_int(tillId)
+		)).send();
+
+		return;
+	}
+
+	// AyuGram fix: Update local read state immediately so the UI
+	// reflects the read (unread counter, bold chat entry, etc.).
+	const auto stillUnread = history->countStillUnreadLocal(tillId);
+	history->setInboxReadTill(tillId);
+	if (stillUnread) {
+		history->setUnreadCount(*stillUnread);
+	}
+	history->updateChatListEntry();
+
 	history->session().data().histories()
 		.sendRequest(history,
 					 Data::Histories::RequestType::ReadInbox,
@@ -422,7 +457,12 @@ void readHistory(not_null<HistoryItem*> message) {
 							 return history->session().api().request(MTPchannels_ReadHistory(
 								 channel->inputChannel(),
 								 MTP_int(tillId)
-							 )).done([=] { AyuWorker::markAsOnline(&history->session()); }).send();
+							 )).done([=] {
+								 AyuWorker::markAsOnline(&history->session());
+								 finish();
+							 }).fail([=] {
+								 finish();
+							 }).send();
 						 }
 
 						 return history->session().api().request(MTPmessages_ReadHistory(
@@ -432,8 +472,10 @@ void readHistory(not_null<HistoryItem*> message) {
 						 {
 							 history->session().api().applyAffectedMessages(history->peer, result);
 							 AyuWorker::markAsOnline(&history->session());
+							 finish();
 						 }).fail([=]
 						 {
+							 finish();
 						 }).send();
 					 });
 

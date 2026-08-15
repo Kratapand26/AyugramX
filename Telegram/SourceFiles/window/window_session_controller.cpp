@@ -2316,7 +2316,6 @@ void SessionController::setActiveChatEntry(Dialogs::RowDescriptor row) {
 	if (windowId().type == SeparateType::SharedMedia) {
 		return;
 	}
-	pushChatHistory({ row.key, row.fullId.msg });
 	const auto was = _activeChatEntry.current();
 	if (was.key && was.key != row.key) {
 		session().api().saveCurrentDraftToCloud();
@@ -2352,6 +2351,12 @@ void SessionController::setActiveChatEntry(Dialogs::RowDescriptor row) {
 	if (session().supportMode()) {
 		pushToChatEntryHistory(row);
 	}
+	// Save scroll state of the current chat before pushing
+	// a new one, so that Back navigation restores the position.
+	if (was.key && was.key != row.key) {
+		saveCurrentMementoToHistory();
+	}
+	pushChatHistory({ row.key, row.fullId.msg });
 	checkInvitePeek();
 }
 
