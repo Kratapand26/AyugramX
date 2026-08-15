@@ -44,6 +44,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include <QtCore/QBuffer>
 #include <QtCore/QMimeType>
 #include <QtCore/QMimeDatabase>
+#include <QtCore/QSettings>
+#include <QtCore/QDir>
 
 namespace {
 
@@ -1196,9 +1198,85 @@ bool DocumentData::waitingForAlbum() const {
 
 void DocumentData::save(
 		Data::FileOrigin origin,
-		const QString &toFile,
+		QString toFile,
 		LoadFromCloudSetting fromCloud,
 		bool autoLoading) {
+
+	// AyuGram Sequential Override
+	if (!autoLoading && !toFile.isEmpty() && (!this->loading() || this->_loader == nullptr)) {
+		QFileInfo fi(toFile);
+		QString dir = fi.absolutePath() + "/";
+		QString filename = fi.fileName();
+		
+		static const QRegularExpression rx("^\\d+\\-\\s");
+		if (!rx.match(filename).hasMatch()) {
+			// Read forbidden words to strip from filename
+			QSettings settings(QDir::currentPath() + "/config.ini", QSettings::IniFormat);
+			QString wordsStr = settings.value("CaptionEditing/words_to_remove").toString();
+			if (!wordsStr.isEmpty()) {
+				auto words = wordsStr.split(",", Qt::SkipEmptyParts);
+				for (auto &w : words) {
+                    QString word = w.trimmed();
+                    if (word.startsWith('"') && word.endsWith('"')) {
+                        word = word.mid(1, word.length() - 2);
+                    }
+					filename.replace(word, "", Qt::CaseInsensitive);
+				}
+			}
+			QString patternsStr = settings.value("CaptionEditing/remove_patterns").toString();
+			if (!patternsStr.isEmpty()) {
+				auto patterns = patternsStr.split(",", Qt::SkipEmptyParts);
+				for (auto &p : patterns) {
+					auto markers = p.trimmed().split(":");
+					if (markers.size() == 2) {
+						auto start = QRegularExpression::escape(markers[0]);
+						auto end = QRegularExpression::escape(markers[1]);
+						QRegularExpression rx(start + ".*?" + end);
+						filename.replace(rx, "");
+					}
+				}
+			}
+			
+			QDir directory(dir);
+			QStringList existingFiles = directory.entryList(QDir::Files);
+			int maxSeq = 0;
+			static const QRegularExpression parseRx("^(\\d+)\\-\\s");
+			for (const QString &f : existingFiles) {
+				auto match = parseRx.match(f);
+				if (match.hasMatch()) {
+					int num = match.captured(1).toInt();
+					if (num > maxSeq) {
+						maxSeq = num;
+					}
+				}
+			}
+			auto cleanName = filename.trimmed();
+			// Strip characters invalid on Windows.
+			static const QRegularExpression invalidChars(u"[<>:\"/\\\\|?*]"_q);
+			cleanName.replace(invalidChars, u""_q);
+			// Windows silently drops trailing dots/spaces from filenames,
+			// which causes the written path to differ from the expected
+			// path, triggering FileWriteFailure.
+			while (cleanName.endsWith('.') || cleanName.endsWith(' ')) {
+				cleanName.chop(1);
+			}
+			cleanName = cleanName.trimmed();
+			if (cleanName.isEmpty()) {
+				auto ext = QString();
+				const auto mimeStr = this->mimeString();
+				if (!mimeStr.isEmpty()) {
+					const auto patterns = Core::MimeTypeForName(mimeStr).globPatterns();
+					if (!patterns.isEmpty()) {
+						ext = patterns.front();
+						ext.replace('*', QString());
+					}
+				}
+				cleanName = QString("file_%1%2").arg(maxSeq + 1).arg(ext);
+			}
+			toFile = dir + QString::number(maxSeq + 1) + "- " + cleanName;
+		}
+	}
+	// AyuGram End
 	if (const auto media = activeMediaView(); media && media->loaded(true)) {
 		auto &l = location(true);
 		if (!toFile.isEmpty()) {
@@ -1320,16 +1398,14 @@ void DocumentData::handleLoaderUpdates() {
 				crl::guard(&session(), retry)
 			}));
 		} else if (error.failureReason == FailureReason::FileWriteFailure) {
-			if (!Core::App().settings().downloadPath().isEmpty()) {
-				Core::App().settings().setDownloadPathBookmark(QByteArray());
-				Core::App().settings().setDownloadPath(QString());
-				Core::App().saveSettingsDelayed();
-				InvokeQueued(qApp, [] {
-					Ui::show(
-						Ui::MakeInformBox(
-							tr::lng_download_path_failed(tr::now)));
-				});
-			}
+			// AyuGram: Don't reset the custom download directory on
+			// write failures. Individual file errors (e.g. from numbered
+			// filenames) should not nuke the user's chosen directory.
+			InvokeQueued(qApp, [] {
+				Ui::show(
+					Ui::MakeInformBox(
+						tr::lng_download_path_failed(tr::now)));
+			});
 		}
 		finishLoad();
 		status = FileDownloadFailed;

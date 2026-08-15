@@ -1098,6 +1098,70 @@ bool AddSelectMessageAction(
 			}
 		}
 	}, &st::menuIconSelect);
+
+	// "Select up to this message" — AyuGram.
+	// Works for channels, groups, AND forum topics.
+	// Uses message-ID range to collect items between the nearest
+	// selected item and the right-clicked item.
+	[&] {
+		const auto &selected = request.selectedItems;
+		if (selected.empty()) {
+			return;
+		}
+		const auto toItem = item;
+		const auto toId = toItem->fullId();
+
+		// Find the nearest already-selected item by message ID distance.
+		auto nearestId = FullMsgId();
+		auto minDiff = std::numeric_limits<int64>::max();
+		auto topToBottom = false;
+		for (const auto &sel : selected) {
+			const auto diff = sel.msgId.msg.bare - toId.msg.bare;
+			if (std::abs(diff) < minDiff) {
+				nearestId = sel.msgId;
+				minDiff = std::abs(diff);
+				topToBottom = (diff < 0);
+			}
+		}
+		if (!nearestId) {
+			return;
+		}
+
+		const auto nearestItem = owner->message(nearestId);
+		if (!nearestItem) {
+			return;
+		}
+
+		const auto startItem = topToBottom ? nearestItem : toItem;
+		const auto endItem = topToBottom ? toItem : nearestItem;
+		const auto history = startItem->history();
+		if (history != endItem->history()) {
+			return;
+		}
+		const auto startMsgId = startItem->id;
+		const auto endMsgId = endItem->id;
+
+		if (startMsgId == endMsgId) {
+			return;
+		}
+
+		const auto startId = startItem->fullId();
+		const auto endId = endItem->fullId();
+		menu->addAction(
+			tr::lng_context_select_msg_bulk(tr::now),
+			[=] {
+				const auto from = owner->message(startId);
+				const auto to = owner->message(endId);
+				if (!from || !to) {
+					return;
+				}
+				// selectItemsInRange iterates the data layer sequentially,
+				// so all unloaded/unrendered items and groups are perfectly selected.
+				list->selectItemsInRange(from, to);
+			},
+			&st::menuIconSelect);
+	}();
+
 	return true;
 }
 

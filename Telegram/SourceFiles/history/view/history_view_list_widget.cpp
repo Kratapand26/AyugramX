@@ -1711,6 +1711,30 @@ void ListWidget::selectItemAsGroup(not_null<HistoryItem*> item) {
 	}
 }
 
+void ListWidget::selectItemsInRange(not_null<HistoryItem*> from, not_null<HistoryItem*> to) {
+	if (hasSelectRestriction()) {
+		return;
+	}
+	clearTextSelection();
+
+	const auto minId = std::min(from->id.bare, to->id.bare);
+	const auto maxId = std::max(from->id.bare, to->id.bare);
+	const auto peerId = from->history()->peer->id;
+	const auto topicRootId = from->topicRootId();
+	auto &owner = session().data();
+
+	for (auto id = minId; id <= maxId; ++id) {
+		if (_selected.size() >= MaxSelectedItems) break;
+		const auto item = owner.message(FullMsgId(peerId, MsgId(id)));
+		if (!item || !item->isRegular() || item->isService()) continue;
+		if (topicRootId && item->topicRootId() != topicRootId) continue;
+		
+		changeSelectionAsGroup(_selected, item, SelectAction::Select);
+	}
+	pushSelectedItems();
+	update();
+}
+
 void ListWidget::showEditCaptionUploadLayer(not_null<HistoryItem*> item) {
 	if (const auto view = viewForItem(item)) {
 		if (item->isUploading()) {

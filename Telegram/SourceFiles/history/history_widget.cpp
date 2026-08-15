@@ -4862,6 +4862,26 @@ void HistoryWidget::firstLoadMessages() {
 	auto &histories = history->owner().histories();
 	_firstLoadRequest = histories.sendRequest(history, type, [=](
 			Fn<void()> finish) {
+		const auto topicRootId = resolveReplyToTopicRootId();
+		if (topicRootId) {
+			return history->session().api().request(MTPmessages_GetReplies(
+				history->peer->input(),
+				MTP_int(topicRootId),
+				MTP_int(offsetId),
+				MTP_int(offsetDate),
+				MTP_int(offset),
+				MTP_int(loadCount),
+				MTP_int(maxId),
+				MTP_int(minId),
+				MTP_long(historyHash)
+			)).done([=](const MTPmessages_Messages &result) {
+				messagesReceived(history->peer, result, _firstLoadRequest);
+				finish();
+			}).fail([=](const MTP::Error &error) {
+				messagesFailed(error, _firstLoadRequest);
+				finish();
+			}).send();
+		}
 		return history->session().api().request(MTPmessages_GetHistory(
 			history->peer->input(),
 			MTP_int(offsetId),
@@ -4920,6 +4940,26 @@ void HistoryWidget::loadMessages() {
 	auto &histories = history->owner().histories();
 	_preloadRequest = histories.sendRequest(history, type, [=](
 			Fn<void()> finish) {
+		const auto topicRootId = resolveReplyToTopicRootId();
+		if (topicRootId) {
+			return history->session().api().request(MTPmessages_GetReplies(
+				history->peer->input(),
+				MTP_int(topicRootId),
+				MTP_int(offsetId),
+				MTP_int(offsetDate),
+				MTP_int(addOffset),
+				MTP_int(loadCount),
+				MTP_int(maxId),
+				MTP_int(minId),
+				MTP_long(historyHash)
+			)).done([=](const MTPmessages_Messages &result) {
+				messagesReceived(history->peer, result, _preloadRequest);
+				finish();
+			}).fail([=](const MTP::Error &error) {
+				messagesFailed(error, _preloadRequest);
+				finish();
+			}).send();
+		}
 		return history->session().api().request(MTPmessages_GetHistory(
 			history->peer->input(),
 			MTP_int(offsetId),
@@ -5020,6 +5060,26 @@ void HistoryWidget::loadMessagesDown() {
 	auto &histories = history->owner().histories();
 	_preloadDownRequest = histories.sendRequest(history, type, [=](
 			Fn<void()> finish) {
+		const auto topicRootId = resolveReplyToTopicRootId();
+		if (topicRootId) {
+			return history->session().api().request(MTPmessages_GetReplies(
+				history->peer->input(),
+				MTP_int(topicRootId),
+				MTP_int(offsetId + 1),
+				MTP_int(offsetDate),
+				MTP_int(addOffset),
+				MTP_int(loadCount),
+				MTP_int(maxId),
+				MTP_int(minId),
+				MTP_long(historyHash)
+			)).done([=](const MTPmessages_Messages &result) {
+				messagesReceived(history->peer, result, _preloadDownRequest);
+				finish();
+			}).fail([=](const MTP::Error &error) {
+				messagesFailed(error, _preloadDownRequest);
+				finish();
+			}).send();
+		}
 		return history->session().api().request(MTPmessages_GetHistory(
 			history->peer->input(),
 			MTP_int(offsetId + 1),
