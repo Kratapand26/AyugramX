@@ -1,0 +1,306 @@
+name: Build AyuGram Windows
+ 
+on:
+  workflow_dispatch:
+ 
+ 
+env:
+  UPLOAD_ARTIFACT: "true"
+ 
+jobs:
+  build:
+    runs-on: windows-2022
+ 
+    defaults:
+      run:
+        shell: cmd
+ 
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+ 
+      - name: Restore Git Timestamps (Recursive)
+        shell: bash
+        run: |
+          curl -sLo git-restore-mtime.py https://raw.githubusercontent.com/MestreLion/git-tools/main/git-restore-mtime
+          python git-restore-mtime.py
+          WORKSPACE_FWD="${GITHUB_WORKSPACE//\\//}"
+          git submodule foreach --recursive "python '$WORKSPACE_FWD/git-restore-mtime.py'"
+ 
+      - name: Configure Pagefile (required for LTO link step)
+        uses: al-cheb/configure-pagefile-action@v1.4
+        with:
+          minimum-size: 20GB
+          maximum-size: 20GB
+          disk-root: "C:"
+ 
+      - name: Verify Pagefile
+        shell: pwsh
+        run: |
+          # The LTO link step OOMs without a large pagefile, surfacing as
+          # opaque LNK1104 / LNK1318 errors ~40 min into the build. Fail
+          # fast here instead of dying deep in the link step.
+          $pf = Get-CimInstance -ClassName Win32_PageFileUsage -ErrorAction SilentlyContinue
+          if ($null -eq $pf) {
+            Write-Host "::error::No pagefile is active — the LTO link will OOM. Aborting."
+            exit 1
+          }
+          $mb = [int]($pf | Measure-Object -Property AllocatedBaseSize -Sum).Sum
+          Write-Host "Active pagefile: $mb MB"
+          if ($mb -lt 15000) {
+            Write-Host "::error::Pagefile too small ($mb MB < 15000 MB). LTO link will fail."
+            exit 1
+          }
+ 
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+ 
+      - name: Setup MSVC Dev Shell (x64)
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+          toolset: 14.44
+ 
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+ 
+      - name: Install Python dependencies
+        run: pip install "pywin32==306" "six==1.16.0" "meson==1.4.0" "ninja==1.11.1.4"
+ 
+      - name: Install and Configure rclone
+        shell: pwsh
+        env:
+          RCLONE_CONF_SECRET: ${{ secrets.RCLONE_CONF }}
+        run: |
+          choco install rclone -y --no-progress
+          # Add both Chocolatey shim path and rclone's own install dir
+          $chocoPath = "$env:ProgramData\chocolatey\bin"
+          echo "$chocoPath" >> $env:GITHUB_PATH
+          $rclonePath = "$env:ProgramData\chocolatey\lib\rclone\tools"
+          if (Test-Path $rclonePath) {
+            echo "$rclonePath" >> $env:GITHUB_PATH
+          }
+          # Verify rclone is accessible within this step too
+          $env:PATH = "$chocoPath;$rclonePath;$env:PATH"
+          rclone version
+          $configPath = "$env:RUNNER_TEMP\rclone.conf"
+          $env:RCLONE_CONF_SECRET | Out-File -Encoding utf8 $configPath
+          Write-Host "rclone installed and Google Drive authentication configured!"
+ 
+      - name: Exclude build directories from Windows Defender
+        shell: pwsh
+        run: |
+          # Fully disable Defender real-time monitoring on this ephemeral CI runner.
+          # Exclusion paths alone are insufficient to prevent YASM .obj corruption (LNK1136).
+          Set-MpPreference -DisableRealtimeMonitoring $true
+          Write-Host "Windows Defender real-time monitoring disabled for build."
+
+      # ---- Libraries cache (versioned by submodule + prepare.py hashes) ----
+      # NOTE: the libs cache MUST be versioned — stale libs cause link/compile
+      # errors, so a content change correctly invalidates it and forces a fresh
+      # prepare.py. This is the opposite of the build cache below.
+
+      - name: Compute library cache key
+        id: libkey
+        shell: bash
+        run: |
+          SUBMOD_HASH=$(git submodule status | sha256sum | cut -d' ' -f1)
+          PREPARE_HASH=$(sha256sum Telegram/build/prepare/prepare.py | cut -d' ' -f1)
+          KEY="libs-${SUBMOD_HASH:0:16}-${PREPARE_HASH:0:16}-14.44"
+          echo "key=$KEY" >> $GITHUB_OUTPUT
+          echo "Library cache key: $KEY"
+
+      - name: Download Libraries Cache from Google Drive
+        id: cache-libs
+        shell: pwsh
+        run: |
+          $configPath = "$env:RUNNER_TEMP\rclone.conf"
+          $cacheFile = "libs_cache-${{ steps.libkey.outputs.key }}.zip"
+          Write-Host "Checking for libraries cache on Google Drive ($cacheFile)..."
+          $exists = rclone --config $configPath lsf "gdrive:$cacheFile" 2>$null
+          if ($LASTEXITCODE -eq 0 -and $exists) {
+            Write-Host "Found libraries cache on Google Drive! Downloading..."
+            rclone --config $configPath copyto "gdrive:$cacheFile" "$cacheFile" --progress --stats 5s 2>&1
+            Write-Host "Libraries cache hit! Extracting to workspace root..."
+            7z x $cacheFile -o"${{ runner.workspace }}" -y -bsp1
+            Remove-Item $cacheFile -Force
+            Write-Host "Libraries restored from Google Drive."
+            echo "cache_hit=true" >> $env:GITHUB_OUTPUT
+          } else {
+            Write-Host "No libraries cache found on Google Drive ($cacheFile) — prepare.py will run from scratch."
+            $global:LASTEXITCODE = 0
+            echo "cache_hit=false" >> $env:GITHUB_OUTPUT
+          }
+
+      - name: Prepare Libraries
+        if: steps.cache-libs.outputs.cache_hit != 'true'
+        run: python Telegram\build\prepare\prepare.py silent qt6
+ 
+      - name: Upload Libraries Cache to Google Drive
+        if: steps.cache-libs.outputs.cache_hit != 'true'
+        shell: pwsh
+        run: |
+          $configPath = "$env:RUNNER_TEMP\rclone.conf"
+          $cacheFile = "libs_cache-${{ steps.libkey.outputs.key }}.zip"
+          $repoName = Split-Path -Leaf $env:GITHUB_WORKSPACE
+          Write-Host "Compressing Libraries and ThirdParty directories..."
+          Set-Location $env:RUNNER_WORKSPACE
+          7z a -tzip -mx=1 "$env:GITHUB_WORKSPACE\$cacheFile" "Libraries" "$repoName\Telegram\ThirdParty" -bsp1
+          Set-Location $env:GITHUB_WORKSPACE
+          Write-Host "Uploading libraries cache to Google Drive..."
+          rclone --config $configPath copyto "$cacheFile" "gdrive:$cacheFile" --progress 2>&1
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "::warning::Libraries cache upload failed, build will still succeed."
+          } else {
+            Write-Host "Libraries cache successfully uploaded to Google Drive!"
+          }
+          Remove-Item $cacheFile -Force -ErrorAction SilentlyContinue
+ 
+      # ---- Build cache (STABLE name — only rotates on toolchain/flag changes) ----
+      # NOTE: the build cache name must NOT depend on source content. The whole
+      # point is to download the PREVIOUS run's .obj files and let ninja
+      # incrementally rebuild only the files that changed. The key rotates only
+      # when something makes cached .obj files incompatible (toolset, Qt major,
+      # LTO flag, generator). Source edits are handled by ninja's own dep graph.
+ 
+      - name: Download Build Cache from Google Drive
+        id: gdrive-cache
+        shell: pwsh
+        run: |
+          $configPath = "$env:RUNNER_TEMP\rclone.conf"
+          # Stable across source edits; rotates only on toolchain/flag changes.
+          $cacheFile = "build_cache-msvc14.44-qt6-lto.zip"
+          Write-Host "Checking for build cache on Google Drive ($cacheFile)..."
+          $exists = rclone --config $configPath lsf "gdrive:$cacheFile" 2>$null
+          if ($LASTEXITCODE -eq 0 -and $exists) {
+            Write-Host "Found build cache on Google Drive! Downloading..."
+            rclone --config $configPath copyto "gdrive:$cacheFile" "$cacheFile" --progress --stats 5s 2>&1
+            Write-Host "Cache hit! Extracting into workspace..."
+            7z x $cacheFile -y -bsp1
+            Remove-Item $cacheFile -Force
+            Write-Host "Build cache restored. PCH preserved (pinned MSVC toolset)."
+            echo "cache_hit=true" >> $env:GITHUB_OUTPUT
+          } else {
+            Write-Host "No build cache found on Google Drive ($cacheFile) — full build will start."
+            $global:LASTEXITCODE = 0
+            echo "cache_hit=false" >> $env:GITHUB_OUTPUT
+          }
+      - name: Purge stale cached paths
+        shell: pwsh
+        run: |
+          # The libraries cache bundles a Python venv (ThirdParty/python) with
+          # hardcoded absolute paths from whichever runner originally built it.
+          # The build cache bundles out/CMakeCache.txt which remembers that same
+          # stale Python path. Both must be removed so CMake discovers the
+          # runner's real Python via actions/setup-python.
+          if (Test-Path "Telegram\ThirdParty\python") {
+            Remove-Item -Recurse -Force "Telegram\ThirdParty\python"
+            Write-Host "Removed stale ThirdParty/python venv."
+          }
+          if (Test-Path "out\CMakeCache.txt") {
+            Remove-Item -Force "out\CMakeCache.txt"
+            Write-Host "Removed stale CMakeCache.txt."
+          }
+ 
+      - name: Configure CMake
+        env:
+          QT: 6.11.0
+          LIBS_DIR: ${{ runner.workspace }}\Libraries\win64
+        shell: pwsh
+        run: |
+          $py = (Get-Command python).Source
+          Write-Host "Using Python: $py"
+          cmd /c "call Telegram\configure.bat qt6 -G `"Ninja Multi-Config`" -DDESKTOP_APP_ENABLE_LTO=ON -DPython3_EXECUTABLE=$py"
+ 
+      - name: Diagnostic — why ninja rebuilds (dry-run explain)
+        if: steps.gdrive-cache.outputs.cache_hit == 'true'
+        shell: pwsh
+        run: |
+          # After restoring the cache, ask ninja WHICH targets it considers
+          # dirty and WHY — without actually building. If the cache worked,
+          # this lists only the files you actually changed. If it lists all
+          # ~2300 targets, the explanation printed here reveals the real
+          # cause (PCH regen, command-hash drift, mtime, missing .ninja_log)
+          # instead of leaving us to guess.
+          Write-Host "--- Running ninja dry-run with explanations ---"
+          $log = & cmake --build out --config Release --target Telegram -- -d explain -n 2>&1 |
+            Out-String
+          # ninja explain lines look like: "... explain: <reason>"
+          $explain = $log -split "`r?`n" | Where-Object { $_ -match "explain:" }
+          Write-Host ("Total dirty targets (explain lines): {0}" -f $explain.Count)
+          Write-Host "--- First 60 dirty-target reasons ---"
+          $explain | Select-Object -First 60 | ForEach-Object { Write-Host $_ }
+          # Persist full log as an artifact for deep debugging if needed.
+          $log | Out-File -Encoding utf8 ninja_explain.log
+ 
+      - name: Build Telegram
+        id: build
+        run: |
+          cmake --build out --config Release --target Telegram
+ 
+      - name: Collect artifact
+        if: success() && steps.build.outcome == 'success'
+        shell: pwsh
+        run: |
+          $dst = "AyuGram-Windows\"
+          New-Item -ItemType Directory -Force $dst | Out-Null
+          Copy-Item "out\Release\AyuGram.exe" $dst
+          Copy-Item "out\Release\Updater.exe" $dst -ErrorAction SilentlyContinue
+ 
+          $dstPdb = "AyuGram-Windows-Debug\"
+          New-Item -ItemType Directory -Force $dstPdb | Out-Null
+          Copy-Item "out\Release\AyuGram.pdb" $dstPdb -ErrorAction SilentlyContinue
+ 
+      - name: Upload Build Cache to Google Drive
+        if: success() && steps.build.outcome == 'success'
+        shell: pwsh
+        run: |
+          $configPath = "$env:RUNNER_TEMP\rclone.conf"
+          $cacheFile = "build_cache-msvc14.44-qt6-lto.zip"
+          Write-Host "Compressing out/ directory..."
+          7z a -tzip -mx=1 $cacheFile out\ -bsp1
+          Write-Host "Pushing build cache to Google Drive ($cacheFile)..."
+          rclone --config $configPath copyto "$cacheFile" "gdrive:$cacheFile" --progress 2>&1
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "::warning::Cache upload failed, but build succeeded."
+          } else {
+            Write-Host "Successfully synced build cache to GDrive!"
+          }
+          Remove-Item $cacheFile -Force -ErrorAction SilentlyContinue
+ 
+      - name: Upload Artifact
+        if: success() && steps.build.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: AyuGram-Windows
+          path: AyuGram-Windows\
+          retention-days: 3
+          compression-level: 9
+ 
+      - name: Upload Debug Symbols (PDB)
+        if: success() && steps.build.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: AyuGram-Windows-Debug
+          path: AyuGram-Windows-Debug\
+          retention-days: 3
+          compression-level: 9
+ 
+      - name: Summary
+        if: always()
+        shell: pwsh
+        run: |
+          $exe = Get-Item "AyuGram-Windows\AyuGram.exe" -ErrorAction SilentlyContinue
+          $size = if ($exe) { [math]::Round($exe.Length/1MB,1) } else { "n/a" }
+          echo "## Build Result" >> $env:GITHUB_STEP_SUMMARY
+          echo "- Status: ${{ job.status }}" >> $env:GITHUB_STEP_SUMMARY
+          echo "- LTO: **ON** (smaller/faster exe, heavy link)" >> $env:GITHUB_STEP_SUMMARY
+          echo "- Libs Cache: ${{ steps.cache-libs.outputs.cache_hit }}" >> $env:GITHUB_STEP_SUMMARY
+          echo "- Build Cache: ${{ steps.gdrive-cache.outputs.cache_hit }}" >> $env:GITHUB_STEP_SUMMARY
+          echo "- Exe size: ${size} MB" >> $env:GITHUB_STEP_SUMMARY
+          echo "- Commit: ${{ github.sha }}" >> $env:GITHUB_STEP_SUMMARY
