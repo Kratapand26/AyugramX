@@ -49,6 +49,17 @@ constexpr auto kNameNoCaptionsVersion = -3;
 
 } // namespace
 
+// AyuGram: Session-sticky forward options storage.
+static auto s_ayuLastForwardOptions = Data::ForwardOptions::PreserveInfo;
+
+Data::ForwardOptions AyuLastForwardOptions() {
+	return s_ayuLastForwardOptions;
+}
+
+void AyuSetLastForwardOptions(Data::ForwardOptions options) {
+	s_ayuLastForwardOptions = options;
+}
+
 ForwardPanel::ForwardPanel(Fn<void()> repaint)
 : _repaint(std::move(repaint)) {
 }
@@ -85,6 +96,23 @@ void ForwardPanel::update(
 		}
 
 		updateTexts();
+	}
+	// AyuGram: Apply sticky forward options to newly set items.
+	if (!_data.items.empty()) {
+		using Options = Data::ForwardOptions;
+		auto sticky = AyuLastForwardOptions();
+		const auto captionsCount = ItemsForwardCaptionsCount(_data.items);
+		const auto canDropNames = !HasOnlyForcedForwardedInfo(_data.items)
+			&& HasDropForwardedInfoSetting(_data.items);
+		if (sticky == Options::NoNamesAndCaptions && !captionsCount) {
+			sticky = Options::NoSenderNames;
+		}
+		if (sticky != Options::PreserveInfo && !canDropNames) {
+			sticky = Options::PreserveInfo;
+		}
+		if (_data.options != sticky) {
+			applyOptions(sticky);
+		}
 	}
 	_itemsUpdated.fire({});
 }
@@ -244,6 +272,7 @@ void ForwardPanel::applyOptions(Data::ForwardOptions options) {
 		const auto topicRootId = _to->topicRootId();
 		const auto monoforumPeerId = _to->monoforumPeerId();
 		_data.options = options;
+		AyuSetLastForwardOptions(options); // AyuGram: Keep sticky options in sync
 		_to->owningHistory()->setForwardDraft(topicRootId, monoforumPeerId, {
 			.ids = _to->owner().itemsToIds(_data.items),
 			.options = options,

@@ -740,6 +740,26 @@ void DraftOptionsBox(
 		{ draft.reply.quote, draft.reply.quoteOffset },
 	};
 	state->forward = std::move(args.forward);
+	// AyuGram: Apply the session-sticky forward options, but validate
+	// them against what the current message(s) actually support.
+	if (!state->forward.items.empty()) {
+		using Options = Data::ForwardOptions;
+		auto sticky = AyuLastForwardOptions();
+		const auto captionsCount = ItemsForwardCaptionsCount(
+			state->forward.items);
+		const auto canDropNames = !HasOnlyForcedForwardedInfo(
+			state->forward.items)
+			&& HasDropForwardedInfoSetting(state->forward.items);
+		// Downgrade: no captions to drop → at most NoSenderNames.
+		if (sticky == Options::NoNamesAndCaptions && !captionsCount) {
+			sticky = Options::NoSenderNames;
+		}
+		// Downgrade: can't drop sender → PreserveInfo.
+		if (sticky != Options::PreserveInfo && !canDropNames) {
+			sticky = Options::PreserveInfo;
+		}
+		state->forward.options = sticky;
+	}
 	state->webpage = draft.webpage;
 	state->preview = previewData;
 
@@ -1199,6 +1219,10 @@ void DraftOptionsBox(
 				&show->session(),
 				state->forward.items,
 				state->forward.options);
+			// AyuGram: Remember choice for subsequent forwards.
+			if (!state->forward.items.empty()) {
+				AyuSetLastForwardOptions(options);
+			}
 			finish(resolveReply(), state->webpage, options);
 		}
 	};

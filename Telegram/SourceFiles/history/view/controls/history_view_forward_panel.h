@@ -104,4 +104,8 @@ void EditWebPageOptions(
 	const HistoryItemsList &list,
 	Data::ForwardOptions options);
 
+// AyuGram: Session-sticky forward options (Hide Sender / Hide Caption).
+[[nodiscard]] Data::ForwardOptions AyuLastForwardOptions();
+void AyuSetLastForwardOptions(Data::ForwardOptions options);
+
 } // namespace HistoryView::Controls
