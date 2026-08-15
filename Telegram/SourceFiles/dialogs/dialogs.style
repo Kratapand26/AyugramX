@@ -303,6 +303,17 @@ dialogsSearchFrom: IconButton(dialogsCalendar) {
 	icon: icon {{ "dialogs/dialogs_search_from", dialogsMenuIconFg }};
 	iconOver: icon {{ "dialogs/dialogs_search_from", dialogsMenuIconFgOver }};
 }
+dialogsFilenameSearch: IconButton(dialogsCalendar) {
+	width: 29px;
+	icon: icon {{ "menu/file", dialogsMenuIconFg }};
+	iconOver: icon {{ "menu/file", dialogsMenuIconFgOver }};
+}
+
+dialogsSearchForNarrowFilters: IconButton(dialogsMenuToggle) {
+	icon: icon {{ "top_bar_search", menuIconFg }};
+	iconOver: icon {{ "top_bar_search", menuIconFgOver }};
+	iconPosition: point(4px, 4px);
+}
 
 dialogsFilter: InputField(defaultInputField) {
 	textBg: filterInputInactiveBg;

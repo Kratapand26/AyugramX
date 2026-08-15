@@ -902,6 +902,11 @@ editPeerUsernameFieldMargins: margins(22px, 0px, 22px, 0px);
 historyTopBarBack: IconButton(infoTopBarBack) {
 	width: 52px;
 }
+historyTopBarForward: IconButton(infoTopBarBack) {
+	width: 52px;
+	icon: icon {{ "info/info_back-flip_horizontal", boxTitleCloseFg }};
+	iconOver: icon {{ "info/info_back-flip_horizontal", boxTitleCloseFgOver }};
+}
 topBarHeight: 54px;
 topBarMenuPosition: point(-6px, 45px);
 topBarMenuGroupCallSkip: 20px;

@@ -1478,7 +1478,14 @@ void MainWidget::showHistory(
 		if (const auto activeChat = _controller->activeChatCurrent()) {
 			if (const auto peer = activeChat.peer()) {
 				if (way == Way::Forward && peer->id == peerId) {
-					way = _mainSection ? Way::Backward : Way::ClearStack;
+					if (params.allowDuplicateInStack && _mainSection) {
+						// Keep Way::Forward: save the info/Files panel
+						// to stack so Back button can restore it.
+					} else {
+						way = _mainSection
+							? Way::Backward
+							: Way::ClearStack;
+					}
 				}
 			}
 		}
@@ -1587,7 +1594,7 @@ void MainWidget::showHistory(
 	}
 
 	if (_dialogs && !_dialogs->isHidden()) {
-		if (!back) {
+		if (!back && !_controller->isNavigatingHistory()) {
 			if (const auto history = _history->history()) {
 				_dialogs->scrollToEntry(Dialogs::RowDescriptor(
 					history,
@@ -1696,7 +1703,7 @@ bool MainWidget::saveSectionInStack(
 	} else if (const auto history = _history->history()) {
 		_stack.push_back(std::make_unique<StackItemHistory>(
 			history,
-			_history->msgId(),
+			ShowAtUnreadMsgId,
 			_history->replyReturns()));
 	} else {
 		// We pretend that we "saved" the chats list state in stack,
@@ -1865,12 +1872,17 @@ void MainWidget::showNewSection(
 	const auto layerRect = parentWidget()->rect();
 	if (newThirdSection) {
 		saveInStack = false;
-	} else if (auto layer = memento->createLayer(_controller, layerRect)) {
-		if (params.activation != anim::activation::background) {
-			_controller->hideLayer(anim::type::instant);
+	} else if (params.way != SectionShow::Way::Backward) {
+		// AyuGram: Skip layer creation when navigating backward
+		// (restoring from stack). This ensures the Info/Files section
+		// is restored as _mainSection, not as a floating layer popup.
+		if (auto layer = memento->createLayer(_controller, layerRect)) {
+			if (params.activation != anim::activation::background) {
+				_controller->hideLayer(anim::type::instant);
+			}
+			_controller->showSpecialLayer(std::move(layer));
+			return;
 		}
-		_controller->showSpecialLayer(std::move(layer));
-		return;
 	}
 
 	if (params.activation != anim::activation::background) {
@@ -2135,10 +2147,11 @@ bool MainWidget::showBackFromStack(const SectionShow &params) {
 	_thirdSectionFromStack = item->takeThirdSectionMemento();
 	if (item->type() == HistoryStackItem) {
 		auto historyItem = static_cast<StackItemHistory*>(item.get());
+		_controller->popChatHistoryEntry();
 		_controller->showPeerHistory(
 			historyItem->peer()->id,
 			params.withWay(SectionShow::Way::Backward),
-			ShowAtUnreadMsgId);
+			historyItem->msgId);
 		_history->setReplyReturns(
 			historyItem->peer()->id,
 			std::move(historyItem->replyReturns));
@@ -2711,6 +2724,30 @@ bool MainWidget::saveThirdSectionToStackBack() const {
 	return !_stack.empty()
 		&& _thirdSection != nullptr
 		&& _stack.back()->thirdSectionWeak() == _thirdSection.data();
+}
+
+std::shared_ptr<Window::SectionMemento> MainWidget::currentMainSectionMemento() const {
+	if (_mainSection) {
+		return _mainSection->createMemento();
+	}
+	return nullptr;
+}
+
+MsgId MainWidget::currentHistoryScrollMsgId() const {
+	if (_history && _history->peer()) {
+		if (const auto h = _history->history()) {
+			if (h->scrollTopItem) {
+				if (const auto item = h->scrollTopItem->data()) {
+					return item->id;
+				}
+			}
+			// Fallback: use the History's own saved showAtMsgId.
+			if (IsServerMsgId(h->showAtMsgId)) {
+				return h->showAtMsgId;
+			}
+		}
+	}
+	return ShowAtUnreadMsgId;
 }
 
 auto MainWidget::thirdSectionForCurrentMainSection(

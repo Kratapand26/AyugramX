@@ -545,6 +545,22 @@ public:
 		const SectionShow &params = SectionShow::Way::ClearStack,
 		MsgId msgId = ShowAtUnreadMsgId) override;
 
+	// Chat Navigation History
+	struct ChatHistoryEntry {
+		Dialogs::Key key;
+		MsgId msgId;
+		std::shared_ptr<SectionMemento> memento;
+	};
+	void pushChatHistory(ChatHistoryEntry entry);
+	void popChatHistoryEntry();
+	[[nodiscard]] bool canGoBackInChatHistory() const;
+	[[nodiscard]] bool canGoForwardInChatHistory() const;
+	[[nodiscard]] bool isNavigatingHistory() const;
+	void goBackInChatHistory();
+	void goForwardInChatHistory();
+	[[nodiscard]] rpl::producer<bool> canGoBackInChatHistoryValue() const;
+	[[nodiscard]] rpl::producer<bool> canGoForwardInChatHistoryValue() const;
+
 	void showMessage(
 		not_null<const HistoryItem*> item,
 		const SectionShow &params = SectionShow::Way::ClearStack);
@@ -785,6 +801,8 @@ private:
 
 	void checkInvitePeek();
 	void setupPremiumToast();
+	void navigateChatHistory(int direction);
+	void saveCurrentMementoToHistory();
 
 	void pushDefaultChatBackground();
 	void cacheChatTheme(
@@ -904,6 +922,12 @@ private:
 
 	rpl::lifetime _starGiftAuctionLifetime;
 	rpl::lifetime _showCloudPasswordLifetime;
+
+	std::deque<ChatHistoryEntry> _chatHistory;
+	int _chatHistoryIndex = -1;
+	int _navigatingHistory = 0;
+	rpl::event_stream<bool> _canGoBackInChatHistoryChanges;
+	rpl::event_stream<bool> _canGoForwardInChatHistoryChanges;
 
 	rpl::lifetime _lifetime;
 

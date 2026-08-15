@@ -2069,6 +2069,7 @@ bool SessionController::openFolderInDifferentWindow(
 }
 
 void SessionController::openFolder(not_null<Data::Folder*> folder) {
+	pushChatHistory({ folder, MsgId() });
 	if (openFolderInDifferentWindow(folder)) {
 		return;
 	} else if (_openedFolder.current() != folder) {
@@ -2315,6 +2316,7 @@ void SessionController::setActiveChatEntry(Dialogs::RowDescriptor row) {
 	if (windowId().type == SeparateType::SharedMedia) {
 		return;
 	}
+	pushChatHistory({ row.key, row.fullId.msg });
 	const auto was = _activeChatEntry.current();
 	if (was.key && was.key != row.key) {
 		session().api().saveCurrentDraftToCloud();
@@ -2545,6 +2547,158 @@ rpl::producer<Dialogs::Key> SessionController::activeChatChanges() const {
 	) | rpl::map([](const Dialogs::RowDescriptor &value) {
 		return value.key;
 	}) | rpl::distinct_until_changed();
+}
+
+void SessionController::pushChatHistory(ChatHistoryEntry entry) {
+	if (_navigatingHistory > 0) {
+		return;
+	}
+	if (!entry.key) {
+		return; // Ignore empty keys
+	}
+	if (_chatHistoryIndex >= 0 && _chatHistoryIndex < static_cast<int>(_chatHistory.size())) {
+		// Dedup on KEY only. If we navigate to the exact same chat,
+		// update the msgId but do NOT create a new history entry.
+		// This prevents truncating forward history when repeatedly
+		// clicking the same chat or using "Go To Message".
+		if (_chatHistory[_chatHistoryIndex].key == entry.key) {
+			_chatHistory[_chatHistoryIndex].msgId = entry.msgId;
+			return;
+		}
+		// If we are alternating to the previous chat, step backwards
+		// instead of pushing a new entry. This prevents infinite stack
+		// growth when clicking back and forth between two chats.
+		if (_chatHistoryIndex > 0 && _chatHistory[_chatHistoryIndex - 1].key == entry.key) {
+			_chatHistoryIndex--;
+			_chatHistory[_chatHistoryIndex].msgId = entry.msgId;
+			_canGoBackInChatHistoryChanges.fire(canGoBackInChatHistory());
+			_canGoForwardInChatHistoryChanges.fire(canGoForwardInChatHistory());
+			return;
+		}
+		// If we navigate to the exact next chat, step forwards
+		// instead of truncating. This prevents the forward button
+		// from vanishing due to delayed asynchronous UI events.
+		if (_chatHistoryIndex + 1 < static_cast<int>(_chatHistory.size())
+			&& _chatHistory[_chatHistoryIndex + 1].key == entry.key) {
+			_chatHistoryIndex++;
+			_chatHistory[_chatHistoryIndex].msgId = entry.msgId;
+			_canGoBackInChatHistoryChanges.fire(canGoBackInChatHistory());
+			_canGoForwardInChatHistoryChanges.fire(canGoForwardInChatHistory());
+			return;
+		}
+		// Truncate history after current index
+		_chatHistory.resize(_chatHistoryIndex + 1);
+	}
+	_chatHistory.push_back(entry);
+	if (_chatHistory.size() > 50) {
+		_chatHistory.pop_front();
+	} else {
+		_chatHistoryIndex++;
+	}
+
+	_canGoBackInChatHistoryChanges.fire(canGoBackInChatHistory());
+	_canGoForwardInChatHistoryChanges.fire(canGoForwardInChatHistory());
+}
+
+void SessionController::popChatHistoryEntry() {
+	if (_chatHistory.empty() || _chatHistoryIndex < 0) {
+		return;
+	}
+	if (_chatHistoryIndex > 0) {
+		_chatHistoryIndex--;
+	}
+	_canGoBackInChatHistoryChanges.fire(canGoBackInChatHistory());
+	_canGoForwardInChatHistoryChanges.fire(canGoForwardInChatHistory());
+}
+
+bool SessionController::isNavigatingHistory() const {
+	return _navigatingHistory > 0;
+}
+
+bool SessionController::canGoBackInChatHistory() const {
+	return _chatHistoryIndex > 0;
+}
+
+bool SessionController::canGoForwardInChatHistory() const {
+	return _chatHistoryIndex >= 0 && _chatHistoryIndex < static_cast<int>(_chatHistory.size()) - 1;
+}
+
+rpl::producer<bool> SessionController::canGoBackInChatHistoryValue() const {
+	return rpl::single(canGoBackInChatHistory()) | rpl::then(_canGoBackInChatHistoryChanges.events());
+}
+
+rpl::producer<bool> SessionController::canGoForwardInChatHistoryValue() const {
+	return rpl::single(canGoForwardInChatHistory()) | rpl::then(_canGoForwardInChatHistoryChanges.events());
+}
+
+void SessionController::navigateChatHistory(int direction) {
+	const auto entry = _chatHistory[_chatHistoryIndex];
+	_navigatingHistory++;
+
+	const auto way = (direction < 0)
+		? SectionShow::Way::Backward
+		: SectionShow::Way::Forward;
+	if (entry.memento) {
+		showSection(entry.memento, SectionShow(way, anim::type::normal));
+	} else if (const auto folder = entry.key.folder()) {
+		openFolder(folder);
+	} else if (const auto sublist = entry.key.sublist()) {
+		showSublist(sublist, ShowAtUnreadMsgId, way);
+	} else if (const auto thread = entry.key.thread()) {
+		showThread(thread, ShowAtUnreadMsgId, way);
+	} else if (const auto peer = entry.key.peer()) {
+		showPeerHistory(peer->id, way, ShowAtUnreadMsgId);
+	}
+
+	_navigatingHistory--;
+
+	// Fire button state immediately so the UI updates without delay.
+	_canGoBackInChatHistoryChanges.fire(canGoBackInChatHistory());
+	_canGoForwardInChatHistoryChanges.fire(canGoForwardInChatHistory());
+
+	// Keep the guard up for one more event loop iteration to block
+	// deferred setActiveChatEntry calls (e.g. from HistoryWidget's
+	// delayed show, setMsgId, or crl::on_main callbacks) that would
+	// otherwise push a stale entry and truncate forward history.
+	_navigatingHistory++;
+	crl::on_main(this, [=] {
+		_navigatingHistory--;
+		_canGoBackInChatHistoryChanges.fire(canGoBackInChatHistory());
+		_canGoForwardInChatHistoryChanges.fire(canGoForwardInChatHistory());
+	});
+}
+
+void SessionController::saveCurrentMementoToHistory() {
+	if (_chatHistoryIndex >= 0
+		&& _chatHistoryIndex < static_cast<int>(_chatHistory.size())) {
+		if (auto mainWidget = window().widget()->sessionContent()) {
+			auto memento = mainWidget->currentMainSectionMemento();
+			if (memento) {
+				// SectionWidget-based view (Info, Files, etc.)
+				_chatHistory[_chatHistoryIndex].memento = std::move(memento);
+			} else {
+				// Normal chat via HistoryWidget — don't override native scroll state.
+				// By leaving msgId as ShowAtUnreadMsgId, HistoryWidget's native 
+				// scrollTopItem cache will automatically restore pixel-perfect position.
+				_chatHistory[_chatHistoryIndex].memento = nullptr;
+				_chatHistory[_chatHistoryIndex].msgId = ShowAtUnreadMsgId;
+			}
+		}
+	}
+}
+
+void SessionController::goBackInChatHistory() {
+	if (!canGoBackInChatHistory()) return;
+	saveCurrentMementoToHistory();
+	_chatHistoryIndex--;
+	navigateChatHistory(-1);
+}
+
+void SessionController::goForwardInChatHistory() {
+	if (!canGoForwardInChatHistory()) return;
+	saveCurrentMementoToHistory();
+	_chatHistoryIndex++;
+	navigateChatHistory(1);
 }
 
 auto SessionController::activeChatEntryValue() const
@@ -3087,7 +3241,7 @@ void SessionController::showInNewWindow(
 		MsgId msgId) {
 	if (!canShowSeparateWindow(id)) {
 		Assert(id.thread != nullptr);
-		showThread(id.thread, msgId, SectionShow::Way::ClearStack);
+		showThread(id.thread, msgId, SectionShow::Way::Forward);
 		return;
 	}
 	const auto active = activeChatCurrent();

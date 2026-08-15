@@ -205,6 +205,7 @@ private:
 
 	void infoClicked();
 	void backClicked();
+	void navForwardClicked();
 
 	void refreshUnreadBadge();
 	void updateUnreadBadge();
@@ -248,6 +249,7 @@ private:
 	rpl::event_stream<bool> _searchModeChanges;
 
 	object_ptr<Ui::IconButton> _back;
+	object_ptr<Ui::IconButton> _navForward;
 	object_ptr<Ui::IconButton> _cancelChoose;
 	object_ptr<Ui::UnreadBadge> _unreadBadge = { nullptr };
 	object_ptr<Ui::AbstractButton> _info = { nullptr };

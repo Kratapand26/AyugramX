@@ -116,6 +116,8 @@ public:
 	[[nodiscard]] bool isPrimary() const;
 	[[nodiscard]] bool isMainSectionShown() const;
 	[[nodiscard]] bool isThirdSectionShown() const;
+	[[nodiscard]] std::shared_ptr<Window::SectionMemento> currentMainSectionMemento() const;
+	[[nodiscard]] MsgId currentHistoryScrollMsgId() const;
 
 	[[nodiscard]] Dialogs::RowDescriptor resolveChatNext(
 		Dialogs::RowDescriptor from) const;

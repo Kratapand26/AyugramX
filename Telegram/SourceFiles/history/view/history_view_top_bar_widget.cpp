@@ -131,6 +131,7 @@ TopBarWidget::TopBarWidget(
 , _delete(this, tr::lng_selected_delete(), st::defaultActiveButton)
 , _messageShot(this, tr::ayu_MessageShotTopBarText(), st::defaultActiveButton)
 , _back(this, st::historyTopBarBack)
+, _navForward(this, st::historyTopBarForward)
 , _cancelChoose(this, st::topBarCloseChoose)
 , _call(this, st::topBarCall)
 , _groupCall(this, st::topBarGroupCall)
@@ -197,6 +198,10 @@ TopBarWidget::TopBarWidget(
 	_back->setAcceptBoth();
 	_back->addClickHandler([=](Qt::MouseButton) {
 		InvokeQueued(_back.data(), [=] { backClicked(); });
+	});
+	_navForward->setAcceptBoth();
+	_navForward->addClickHandler([=](Qt::MouseButton) {
+		InvokeQueued(_navForward.data(), [=] { navForwardClicked(); });
 	});
 	_cancelChoose->setClickedCallback(
 		[=] { _cancelChooseForReport.fire({}); });
@@ -291,6 +296,15 @@ TopBarWidget::TopBarWidget(
 		updateConnectingState();
 	}, lifetime());
 
+	rpl::merge(
+		_controller->canGoBackInChatHistoryValue(),
+		_controller->canGoForwardInChatHistoryValue()
+	) | rpl::on_next([=](bool) {
+		updateControlsVisibility();
+		updateControlsGeometry();
+		update();
+	}, lifetime());
+
 	setCursor(style::cur_pointer);
 	_call->setAccessibleName(tr::lng_profile_action_short_call(tr::now));
 	_groupCall->setAccessibleName(tr::lng_group_call_title(tr::now));
@@ -298,6 +312,7 @@ TopBarWidget::TopBarWidget(
 	_infoToggle->setAccessibleName(tr::lng_settings_section_info(tr::now));
 	_menuToggle->setAccessibleName(tr::lng_chat_menu(tr::now));
 	_back->setAccessibleName(tr::lng_go_back(tr::now));
+	_navForward->setAccessibleName(tr::lng_selected_forward(tr::now));
 	_cancelChoose->setAccessibleName(tr::lng_cancel(tr::now));
 }
 
@@ -880,6 +895,10 @@ void TopBarWidget::infoClicked() {
 }
 
 void TopBarWidget::backClicked() {
+	if (_chooseForReportReason) {
+		return;
+	}
+
 	if (_activeChat.key.folder()) {
 		const auto &settings = AyuSettings::getInstance();
 		if (settings.hideAllChatsFolder()) {
@@ -898,8 +917,21 @@ void TopBarWidget::backClicked() {
 		&& _activeChat.key.history()->peer->asChannel()
 		&& _activeChat.key.history()->peer->asChannel()->isCommunity()) {
 		_controller->closeCommunity();
+	} else if (!_controller->content()->stackIsEmpty()) {
+		_controller->showBackFromStack();
+	} else if (_controller->canGoBackInChatHistory()) {
+		_controller->goBackInChatHistory();
 	} else {
 		_controller->showBackFromStack();
+	}
+}
+
+void TopBarWidget::navForwardClicked() {
+	if (_chooseForReportReason) {
+		return;
+	}
+	if (_controller->canGoForwardInChatHistory()) {
+		_controller->goForwardInChatHistory();
 	}
 }
 
@@ -1242,18 +1274,24 @@ void TopBarWidget::updateControlsGeometry() {
 		_leftTaken = 0;
 		_cancelChoose->moveToLeft(_leftTaken, otherButtonsTop);
 		_leftTaken += _cancelChoose->width();
-	} else if (_back->isHidden()) {
+	} else if (_back->isHidden() && _navForward->isHidden()) {
 		_leftTaken = st::topBarArrowPadding.right();
 	} else {
 		_leftTaken = anim::interpolate(
 			0,
 			(_narrowWidth - _back->width()) / 2,
 			_narrowRatio);
-		_back->moveToLeft(_leftTaken, backButtonTop);
-		_leftTaken += _back->width();
+		if (!_back->isHidden()) {
+			_back->moveToLeft(_leftTaken, backButtonTop);
+			_leftTaken += _back->width();
+		}
+		if (!_navForward->isHidden()) {
+			_navForward->moveToLeft(_leftTaken, backButtonTop);
+			_leftTaken += _navForward->width();
+		}
 	}
 	if (_info && !_info->isHidden()) {
-		if (_back->isHidden() && _narrowRatio > 0.) {
+		if (_back->isHidden() && _navForward->isHidden() && _narrowRatio > 0.) {
 			const auto &infoSt = infoButtonStyle();
 			const auto middle = (_narrowWidth - infoSt.photoSize) / 2;
 			_leftTaken = anim::interpolate(
@@ -1269,7 +1307,7 @@ void TopBarWidget::updateControlsGeometry() {
 	}
 
 	if (_searchField) {
-		const auto fieldLeft = _back->isHidden()
+		const auto fieldLeft = (_back->isHidden() && _navForward->isHidden())
 			? st::topBarArrowPadding.right()
 			: _leftTaken;
 		const auto fieldTop = searchFieldTop
@@ -1288,10 +1326,14 @@ void TopBarWidget::updateControlsGeometry() {
 			+ fieldWidth
 			- _searchCancel->width();
 		_searchCancel->moveToLeft(cancelLeft, fieldY);
+		auto right = cancelLeft;
 		if (_jumpToDate) {
-			_jumpToDate->moveToLeft(
-				cancelLeft - st::dialogsCalendarTopBar.width,
-				fieldY);
+			right -= st::dialogsCalendarTopBar.width;
+			_jumpToDate->moveToLeft(right, fieldY);
+		}
+		if (_filenameSearch) {
+			right -= st::dialogsFilenameSearch.width;
+			_filenameSearch->moveToLeft(right, fieldY);
 		}
 		updateChooseFromUserGeometry();
 		updateSearchJumpToDateVisibility();
@@ -1321,6 +1363,7 @@ void TopBarWidget::updateControlsGeometry() {
 	}
 	_admins->moveToRight(_rightTaken, otherButtonsTop);
 	if (!_admins->isHidden()) {
+		_admins->moveToRight(_rightTaken, otherButtonsTop);
 		_rightTaken += _admins->width();
 	}
 
@@ -1347,6 +1390,20 @@ void TopBarWidget::setAnimatingMode(bool enabled) {
 }
 
 void TopBarWidget::updateControlsVisibility() {
+	const auto isOneColumn = _controller->adaptive().isOneColumn();
+	const auto backVisible = !rootChatsListBar()
+		&& (isOneColumn
+			|| (_activeChat.section == Section::ChatsList)
+			|| !_controller->content()->stackIsEmpty()
+			|| (_activeChat.section != Section::ChatsList
+				&& _controller->canGoBackInChatHistory()));
+	_back->setVisible(backVisible && !_chooseForReportReason);
+
+	const auto navForwardVisible = !rootChatsListBar()
+		&& (_activeChat.section != Section::ChatsList)
+		&& _controller->canGoForwardInChatHistory();
+	_navForward->setVisible(navForwardVisible && !_chooseForReportReason);
+
 	if (!_activeChat.key) {
 		return;
 	} else if (_animatingMode) {
@@ -1363,13 +1420,6 @@ void TopBarWidget::updateControlsVisibility() {
 	_forward->setVisible(_canForward && visible);
 	_sendNow->setVisible(_canSendNow && visible);
 
-
-	const auto isOneColumn = _controller->adaptive().isOneColumn();
-	const auto backVisible = !rootChatsListBar()
-		&& (isOneColumn
-			|| (_activeChat.section == Section::ChatsList)
-			|| !_controller->content()->stackIsEmpty());
-	_back->setVisible(backVisible && !_chooseForReportReason);
 	_cancelChoose->setVisible(_chooseForReportReason.has_value());
 	updateInfoButtonVisibility();
 	if (_unreadBadge) {
