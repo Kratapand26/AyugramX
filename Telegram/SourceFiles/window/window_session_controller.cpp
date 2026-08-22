@@ -2640,6 +2640,19 @@ void SessionController::navigateChatHistory(int direction) {
 	const auto entry = _chatHistory[_chatHistoryIndex];
 	_navigatingHistory++;
 
+	auto targetPeer = entry.key.peer();
+	if (!targetPeer) {
+		if (const auto thread = entry.key.thread()) {
+			targetPeer = thread->peer();
+		}
+	}
+	const auto targetForum = targetPeer ? targetPeer->forum() : nullptr;
+	if (_shownForum.current() && _shownForum.current() != targetForum) {
+		closeForum();
+	} else if (targetForum && _shownForum.current() != targetForum && !targetForum->peer()->useSubsectionTabs()) {
+		showForum(targetForum);
+	}
+
 	const auto way = (direction < 0)
 		? SectionShow::Way::Backward
 		: SectionShow::Way::Forward;
