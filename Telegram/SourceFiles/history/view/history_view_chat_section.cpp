@@ -38,6 +38,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ui/widgets/buttons.h"
 #include "ui/widgets/elastic_scroll.h"
 #include "ui/widgets/popup_menu.h"
+#include "ayu/ayu_settings.h"
 #include "ui/text/format_values.h"
 #include "ui/text/text_utilities.h"
 #include "ui/effects/message_sending_animation_controller.h"
@@ -2579,6 +2580,12 @@ void ChatWidget::hidePinnedMessage() {
 
 void ChatWidget::cornerButtonsShowAtPosition(
 		Data::MessagePosition position) {
+	if (position == Data::UnreadMessagePosition) {
+		const auto &ghost = AyuSettings::ghost(&_peer->session());
+		if (!ghost.sendReadMessages()) {
+			position = Data::MaxMessagePosition;
+		}
+	}
 	showAtPosition(position);
 }
 

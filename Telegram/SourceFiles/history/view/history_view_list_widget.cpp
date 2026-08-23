@@ -38,6 +38,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "history/view/history_view_top_peers_selector.h"
 #include "history/view/history_view_quick_action.h"
 #include "chat_helpers/message_field.h"
+#include "ayu/ayu_settings.h"
 #include "mainwindow.h"
 #include "mainwidget.h"
 #include "core/application.h"
@@ -1006,6 +1007,10 @@ void ListWidget::overrideInitialScroll(Fn<bool()> callback) {
 }
 
 bool ListWidget::jumpToBottomInsteadOfUnread() const {
+	const auto &ghost = AyuSettings::ghost(&session());
+	if (!ghost.sendReadMessages()) {
+		return true;
+	}
 	// If we want to jump to unread, but we're at the unread already,
 	// then jump to the end of the list.
 	//

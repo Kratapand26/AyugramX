@@ -26,6 +26,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "lang/lang_keys.h"
 #include "ui/toast/toast.h"
 #include "styles/style_chat_helpers.h"
+#include "ayu/ayu_settings.h"
 
 namespace HistoryView {
 
@@ -107,10 +108,17 @@ bool CornerButtons::eventFilter(QObject *o, QEvent *e) {
 }
 
 void CornerButtons::downClick() {
-	if (base::IsCtrlPressed() || !_replyReturn) {
-		_delegate->cornerButtonsShowAtPosition(Data::UnreadMessagePosition);
-	} else {
+	if (_replyReturn) {
 		_delegate->cornerButtonsShowAtPosition(_replyReturn->position());
+	} else {
+		const auto thread = _delegate->cornerButtonsThread();
+		const auto session = thread ? &thread->session() : nullptr;
+		const auto &ghost = AyuSettings::ghost(session);
+		if (base::IsCtrlPressed() || !ghost.sendReadMessages()) {
+			_delegate->cornerButtonsShowAtPosition(Data::MaxMessagePosition);
+		} else {
+			_delegate->cornerButtonsShowAtPosition(Data::UnreadMessagePosition);
+		}
 	}
 }
 
