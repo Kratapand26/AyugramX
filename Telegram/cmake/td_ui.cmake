@@ -689,6 +689,9 @@ PRIVATE
     window/window_slide_animation.cpp
     window/window_slide_animation.h
 
+    ayu/ayu_ui_settings.cpp
+    ayu/ayu_ui_settings.h
+
     ui/ui_pch.h
 )
 
