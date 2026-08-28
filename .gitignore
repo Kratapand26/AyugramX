@@ -68,12 +68,24 @@ settings.local.json
 # Cursor IDE local settings (but keep .cursor/rules/)
 .cursor/*
 !.cursor/rules/
+.cursorrules
 
-# Agent local configuration and guides
+# Agent local configuration, instructions and guides
 .agents/
+.claude/
+.grok/
+.gemini/
+.copilot/
+.windsurf/
+.cline/
+.aider*
+AGENTS.md
+CLAUDE.md
+GROK.md
+tasks/
 
 # AI work folder (session-specific, not for version control)
-.ai
+.ai/
 
 # Generated changelog page (built by CI, deployed to GitHub Pages)
 /docs/changelog/
@@ -81,8 +93,33 @@ settings.local.json
 # Project specific
 Telegram/SourceFiles/_other/packer_private.h
 
+# Telegram & AyuGram runtime / portable data
+config.ini
+/tdata/
+TelegramForcePortable/
+test_TelegramForcePortable/
+real_TelegramForcePortable/
+
+# Modern C++ Tooling & IDEs
+CMakeUserPresets.json
+.clangd/
+cmake-build-*/
+*.pdb
+*.ilk
+*.exp
+
 # AI Agent handoff notes
 HANDOFF.md
 *.handoff.md
 HANDOFF*
+
+# Temporary, patch & log files
+*.patch
+*.diff
+*.orig
+*.rej
+*.bak
+*.swp
+*.swo
+*.log
 
