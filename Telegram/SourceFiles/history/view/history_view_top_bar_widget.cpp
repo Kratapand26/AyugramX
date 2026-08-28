@@ -918,10 +918,10 @@ void TopBarWidget::backClicked() {
 		&& _activeChat.key.history()->peer->asChannel()
 		&& _activeChat.key.history()->peer->asChannel()->isCommunity()) {
 		_controller->closeCommunity();
-	} else if (_controller->canGoBackInChatHistory()) {
-		_controller->goBackInChatHistory();
 	} else if (!_controller->content()->stackIsEmpty()) {
 		_controller->showBackFromStack();
+	} else if (_controller->canGoBackInChatHistory()) {
+		_controller->goBackInChatHistory();
 	} else {
 		_controller->showBackFromStack();
 	}
