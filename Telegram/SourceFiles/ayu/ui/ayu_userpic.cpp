@@ -48,6 +48,20 @@ bool IsCircle() {
 	return AyuUiSettings::getAvatarCorners() >= AyuUiSettings::kMaxAvatarCorners;
 }
 
+QImage Round(QImage &&image, int size) {
+	if (IsCircle()) {
+		return Images::Circle(std::move(image));
+	}
+	const auto minSide = (size > 0)
+		? size
+		: std::min(image.width(), image.height()) / style::DevicePixelRatio();
+	const auto r = ComputeRadius(minSide);
+	if (r <= 0) {
+		return std::move(image);
+	}
+	return Images::Round(std::move(image), Images::CornersMask(r));
+}
+
 uint8 PackedState() {
 	return uint8(AyuUiSettings::getAvatarCorners() & 0x1F)
 		| (AyuSettings::getInstance().singleCornerRadius() ? 0x20 : 0);

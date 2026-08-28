@@ -560,9 +560,9 @@ void Photo::validateUserpicImageCache(QSize size, bool forum) const {
 		? Ui::PeerUserpicShape::Forum
 		: Ui::PeerUserpicShape::Circle;
 	if (AyuUserpic::ShouldOverrideShape(shape)) {
-		original = Images::Round(
+		original = AyuUserpic::Round(
 			std::move(original),
-			ImageRoundRadius::AyuUserpic);
+			std::min(size.width(), size.height()));
 	} else {
 		original = Images::Round(
 			std::move(original),

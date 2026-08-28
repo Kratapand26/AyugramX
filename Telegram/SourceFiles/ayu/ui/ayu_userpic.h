@@ -16,8 +16,8 @@ namespace AyuUserpic {
 
 [[nodiscard]] bool ShouldOverrideShape(Ui::PeerUserpicShape shape);
 [[nodiscard]] int ComputeRadius(int pixelSize);
-[[nodiscard]] double ComputeRadiusF(double size);
 [[nodiscard]] bool IsCircle();
+[[nodiscard]] QImage Round(QImage &&image, int size = 0);
 
 [[nodiscard]] uint8 PackedState();
 

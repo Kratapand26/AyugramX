@@ -175,9 +175,7 @@ void ValidateUserpicCache(
 			Qt::IgnoreAspectRatio,
 			Qt::SmoothTransformation);
 		if (ayuOverride) {
-			view.cached = Images::Round(
-				std::move(view.cached),
-				ImageRoundRadius::AyuUserpic);
+			view.cached = AyuUserpic::Round(std::move(view.cached), size);
 		} else if (shape == PeerUserpicShape::Monoforum) {
 			view.cached = Ui::ApplyMonoforumShape(std::move(view.cached));
 		} else if (shape == PeerUserpicShape::Forum) {
@@ -197,7 +195,17 @@ void ValidateUserpicCache(
 
 		auto p = QPainter(&view.cached);
 		if (ayuOverride) {
-			empty->paintCircle(p, 0, 0, size, size);
+			if (AyuUserpic::IsCircle()) {
+				empty->paintCircle(p, 0, 0, size, size);
+			} else {
+				empty->paintRounded(
+					p,
+					0,
+					0,
+					size,
+					size,
+					AyuUserpic::ComputeRadius(size));
+			}
 		} else if (shape == PeerUserpicShape::Monoforum) {
 			empty->paintMonoforum(p, 0, 0, size, size);
 		} else if (shape == PeerUserpicShape::Forum) {

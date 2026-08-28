@@ -1152,7 +1152,7 @@ void UserpicButton::showCustom(QImage &&image) {
 		const auto ayuOverride = AyuUserpic::ShouldOverrideShape(_shape);
 		_userpic = Ui::PixmapFromImage(
 			ayuOverride
-			? Images::Round(std::move(small), ImageRoundRadius::AyuUserpic)
+			? AyuUserpic::Round(std::move(small), _st.photoSize)
 			: useForumShape()
 			? Images::Round(
 				std::move(small),
@@ -1285,9 +1285,9 @@ void UserpicButton::prepareUserpicPixmap() {
 						Qt::SmoothTransformation);
 					const auto ayuNP = AyuUserpic::ShouldOverrideShape(_shape);
 					if (ayuNP) {
-						image = Images::Round(
+						image = AyuUserpic::Round(
 							std::move(image),
-							ImageRoundRadius::AyuUserpic);
+							size);
 					} else if (useForumShape()) {
 						image = Images::Round(
 							std::move(image),
