@@ -1195,6 +1195,7 @@ struct ConfirmedLocalFile {
 		? session->data().message(newId)
 		: nullptr;
 	const auto history = session->data().history(file->to.peer);
+	const auto peer = history->peer;
 	if (!isEditing
 		&& file->type != SendMediaType::Audio
 		&& file->type != SendMediaType::Round) {
