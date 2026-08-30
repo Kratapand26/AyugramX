@@ -226,6 +226,8 @@ void moveCurrentDatabase() {
 
 void initialize() {
 	try {
+		storage.pragma.journal_mode(sqlite_orm::journal_mode::WAL);
+		storage.pragma.synchronous(1);
 		storage.sync_schema(true);
 
 		runMigrations(storage);
@@ -235,6 +237,8 @@ void initialize() {
 		LOG(("Database initialization failed: %1").arg(ex.what()));
 		moveCurrentDatabase();
 
+		storage.pragma.journal_mode(sqlite_orm::journal_mode::WAL);
+		storage.pragma.synchronous(1);
 		storage.sync_schema(true);
 		if (!storage.get_pointer<SchemaVersion>(1)) {
 			storage.insert(SchemaVersion{1, 0});
