@@ -123,6 +123,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "styles/style_ayu_styles.h"
 #include "ui/widgets/tooltip.h"
 #include "ui/text/text_entity.h"
+#include "ui/text/text_utilities.h"
 
 
 namespace Info {
@@ -689,7 +690,6 @@ void SetupAboutPeerIdDrag(
 		object_ptr<Ui::SlideWrap<Ui::VerticalLayout>>(
 			inner,
 			object_ptr<Ui::VerticalLayout>(inner)));
-	other->ease = anim::easeOutCubic;
 	other->toggleOn(state->expanded.value(), anim::type::normal);
 	constexpr auto kSlideDuration = float64(st::slideWrapDuration);
 	other->setDuration(kSlideDuration);
@@ -1838,7 +1838,7 @@ Section DetailsFiller::makeInfo() {
 				user
 			) | rpl::map([](TextWithEntities &&text)
 			{
-				return Ui::Text::Code(text.text);
+				return Ui::Text::Wrapped(std::move(text), EntityType::Code);
 			});
 			auto idInfo = addInfoOneLine(
 				rpl::single(idLabel),
@@ -1954,7 +1954,7 @@ Section DetailsFiller::makeInfo() {
 				_peer
 			) | rpl::map([](TextWithEntities &&text)
 			{
-				return Ui::Text::Code(text.text);
+				return Ui::Text::Wrapped(std::move(text), EntityType::Code);
 			});
 			auto idInfo = addInfoOneLine(
 				idLabel,
@@ -1979,7 +1979,7 @@ Section DetailsFiller::makeInfo() {
 				_peer->forumTopicFor(topicRootId)->topicRootId()
 			) | rpl::map([](TextWithEntities &&text)
 			{
-				return Ui::Text::Code(text.text);
+				return Ui::Text::Wrapped(std::move(text), EntityType::Code);
 			});
 			auto idInfo = addInfoOneLine(
 				rpl::single(u"ID"_q),
