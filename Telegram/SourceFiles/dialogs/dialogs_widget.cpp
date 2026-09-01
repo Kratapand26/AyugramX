@@ -4934,6 +4934,9 @@ void Widget::paintEvent(QPaintEvent *e) {
 }
 
 void Widget::scrollToEntry(const RowDescriptor &entry) {
+	if (controller()->isNavigatingHistory()) {
+		return;
+	}
 	_inner->scrollToEntry(entry);
 }
 

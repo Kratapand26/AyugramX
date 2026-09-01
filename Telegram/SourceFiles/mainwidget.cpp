@@ -1566,7 +1566,7 @@ void MainWidget::showHistory(
 		showParams.way = way;
 		showSection(std::move(memento), showParams);
 		if (_dialogs && !_dialogs->isHidden()) {
-			if (way != Way::Backward) {
+			if (way != Way::Backward && !_controller->isNavigatingHistory()) {
 				_dialogs->scrollToEntry(Dialogs::RowDescriptor(
 					history,
 					FullMsgId(history->peer->id, showAtMsgId)));
