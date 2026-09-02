@@ -2373,7 +2373,7 @@ void SessionController::setActiveChatEntry(Dialogs::RowDescriptor row) {
 	}
 	// Save scroll state of the current chat before pushing
 	// a new one, so that Back navigation restores the position.
-	if (was.key && was.key != row.key) {
+	if (was.key && row.key && was.key != row.key) {
 		saveCurrentMementoToHistory();
 	}
 	pushChatHistory({ row.key, row.fullId.msg });
@@ -2676,16 +2676,17 @@ void SessionController::navigateChatHistory(int direction) {
 	const auto way = (direction < 0)
 		? SectionShow::Way::Backward
 		: SectionShow::Way::Forward;
-	if (entry.memento) {
-		showSection(entry.memento, SectionShow(way, anim::type::normal));
-	} else if (const auto folder = entry.key.folder()) {
+	const auto showAtMsg = entry.msgId ? entry.msgId : ShowAtUnreadMsgId;
+	if (const auto folder = entry.key.folder()) {
 		openFolder(folder);
 	} else if (const auto sublist = entry.key.sublist()) {
-		showSublist(sublist, ShowAtUnreadMsgId, way);
+		showSublist(sublist, showAtMsg, way);
 	} else if (const auto thread = entry.key.thread()) {
-		showThread(thread, ShowAtUnreadMsgId, way);
+		showThread(thread, showAtMsg, way);
 	} else if (const auto peer = entry.key.peer()) {
-		showPeerHistory(peer->id, way, ShowAtUnreadMsgId);
+		showPeerHistory(peer->id, way, showAtMsg);
+	} else if (entry.memento) {
+		showSection(entry.memento, SectionShow(way, anim::type::normal));
 	}
 
 	_navigatingHistory--;
@@ -2709,15 +2710,21 @@ void SessionController::navigateChatHistory(int direction) {
 void SessionController::saveCurrentMementoToHistory() {
 	if (_chatHistoryIndex >= 0
 		&& _chatHistoryIndex < static_cast<int>(_chatHistory.size())) {
+		const auto &entry = _chatHistory[_chatHistoryIndex];
+		// If current entry is a chat, topic, sublist, or folder, do not store a memento.
+		// Native navigation (showThread, showPeerHistory, etc.) will restore them cleanly.
+		if (entry.key.thread() || entry.key.peer() || entry.key.sublist() || entry.key.folder()) {
+			_chatHistory[_chatHistoryIndex].memento = nullptr;
+			return;
+		}
 		if (auto mainWidget = window().widget()->sessionContent()) {
 			auto memento = mainWidget->currentMainSectionMemento();
-			if (memento) {
-				// SectionWidget-based view (Info, Files, etc.)
+			if (memento && !dynamic_cast<HistoryView::ChatMemento*>(memento.get())) {
+				// SectionWidget-based view (Info, Files, Settings, etc.)
 				_chatHistory[_chatHistoryIndex].memento = std::move(memento);
 			} else {
-				// Normal chat via HistoryWidget — don't override native scroll state.
-				// By leaving msgId as ShowAtUnreadMsgId, HistoryWidget's native 
-				// scrollTopItem cache will automatically restore pixel-perfect position.
+				// Normal chat via HistoryWidget or topic via ChatWidget — don't override native scroll state.
+				// By leaving msgId as ShowAtUnreadMsgId, native scroll state cache will restore pixel-perfect position.
 				_chatHistory[_chatHistoryIndex].memento = nullptr;
 				_chatHistory[_chatHistoryIndex].msgId = ShowAtUnreadMsgId;
 			}

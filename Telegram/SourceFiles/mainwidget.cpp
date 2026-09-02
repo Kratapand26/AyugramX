@@ -3170,12 +3170,12 @@ void MainWidget::handleHistoryBack() {
 	if (_mainSection && _mainSection->showBackInternal()) {
 		return;
 	}
-	if (!_stack.empty()) {
-		_controller->showBackFromStack();
-		return;
-	}
 	if (_controller->canGoBackInChatHistory()) {
 		_controller->goBackInChatHistory();
+		return;
+	}
+	if (!_stack.empty()) {
+		_controller->showBackFromStack();
 		return;
 	}
 	const auto openedFolder = _controller->openedFolder().current();
