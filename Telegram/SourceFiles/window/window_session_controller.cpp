@@ -2715,6 +2715,7 @@ void SessionController::saveCurrentMementoToHistory() {
 		// Native navigation (showThread, showPeerHistory, etc.) will restore them cleanly.
 		if (entry.key.thread() || entry.key.peer() || entry.key.sublist() || entry.key.folder()) {
 			_chatHistory[_chatHistoryIndex].memento = nullptr;
+			_chatHistory[_chatHistoryIndex].msgId = ShowAtUnreadMsgId;
 			return;
 		}
 		if (auto mainWidget = window().widget()->sessionContent()) {
