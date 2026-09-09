@@ -27,6 +27,10 @@ void RemoveChatFilter(
 		not_null<Main::Session*> session,
 		FilterId filterId,
 		std::vector<not_null<PeerData*>> leave) {
+	if (Data::IsLocalFilterId(filterId)) {
+		session->data().chatsFilters().deleteLocalFolder(filterId);
+		return;
+	}
 	const auto api = &session->api();
 	session->data().chatsFilters().apply(MTP_updateDialogFilter(
 		MTP_flags(MTPDupdateDialogFilter::Flag(0)),

@@ -1000,93 +1000,95 @@ void EditFilterBox(
 		).withColorIndex(colorIndex);
 	};
 
-	Ui::AddSubsectionTitle(
-		content,
-		rpl::conditional(
+	if (!Data::IsLocalFilterId(filter.id())) {
+		Ui::AddSubsectionTitle(
+			content,
+			rpl::conditional(
+				state->hasLinks.value(),
+				tr::lng_filters_link_has(),
+				tr::lng_filters_link()));
+
+		state->hasLinks.changes() | rpl::on_next([=] {
+			content->resizeToWidth(content->widthNoMargins());
+		}, content->lifetime());
+
+		if (filter.chatlist()) {
+			window->session().data().chatsFilters().reloadChatlistLinks(
+				filter.id());
+		}
+
+		const auto createLink = AddToggledButton(
+			content,
+			state->hasLinks.value() | rpl::map(!rpl::mappers::_1),
+			tr::lng_filters_link_create(),
+			st::settingsButtonActive,
+			{ &st::settingsFolderShareIcon, IconType::Simple });
+		const auto addLink = AddToggledButton(
+			content,
 			state->hasLinks.value(),
-			tr::lng_filters_link_has(),
-			tr::lng_filters_link()));
+			tr::lng_group_invite_add(),
+			st::settingsButtonActive,
+			{ &st::settingsIconAdd, IconType::Round, &st::windowBgActive });
 
-	state->hasLinks.changes() | rpl::on_next([=] {
-		content->resizeToWidth(content->widthNoMargins());
-	}, content->lifetime());
+		SetupFilterLinks(
+			content,
+			window,
+			state->links.value(),
+			[=] { return collect().value_or(Data::ChatFilter()); });
 
-	if (filter.chatlist()) {
-		window->session().data().chatsFilters().reloadChatlistLinks(
-			filter.id());
-	}
+		rpl::merge(
+			createLink->clicks(),
+			addLink->clicks()
+		) | rpl::filter(
+			(rpl::mappers::_1 == Qt::LeftButton)
+		) | rpl::on_next([=](Qt::MouseButton button) {
+			const auto result = collect();
+			if (!result || !GoodForExportFilterLink(window, *result)) {
+				return;
+			}
+			const auto shared = CollectFilterLinkChats(*result);
+			if (shared.empty()) {
+				window->show(ShowLinkBox(window, *result, {}));
+				return;
+			}
+			saveAnd(*result, crl::guard(box, [=](Data::ChatFilter updated) {
+				state->creating = false;
 
-	const auto createLink = AddToggledButton(
-		content,
-		state->hasLinks.value() | rpl::map(!rpl::mappers::_1),
-		tr::lng_filters_link_create(),
-		st::settingsButtonActive,
-		{ &st::settingsFolderShareIcon, IconType::Simple });
-	const auto addLink = AddToggledButton(
-		content,
-		state->hasLinks.value(),
-		tr::lng_group_invite_add(),
-		st::settingsButtonActive,
-		{ &st::settingsIconAdd, IconType::Round, &st::windowBgActive });
+				// Comparison of ChatFilter-s don't take id into account!
+				data->force_assign(updated);
+				const auto id = updated.id();
+				state->links = owner->chatsFilters().chatlistLinks(id);
+				ExportFilterLink(id, shared, crl::guard(box, [=](
+						Data::ChatFilterLink link) {
+					Expects(link.id == id);
 
-	SetupFilterLinks(
-		content,
-		window,
-		state->links.value(),
-		[=] { return collect().value_or(Data::ChatFilter()); });
-
-	rpl::merge(
-		createLink->clicks(),
-		addLink->clicks()
-	) | rpl::filter(
-		(rpl::mappers::_1 == Qt::LeftButton)
-	) | rpl::on_next([=](Qt::MouseButton button) {
-		const auto result = collect();
-		if (!result || !GoodForExportFilterLink(window, *result)) {
-			return;
-		}
-		const auto shared = CollectFilterLinkChats(*result);
-		if (shared.empty()) {
-			window->show(ShowLinkBox(window, *result, {}));
-			return;
-		}
-		saveAnd(*result, crl::guard(box, [=](Data::ChatFilter updated) {
-			state->creating = false;
-
-			// Comparison of ChatFilter-s don't take id into account!
-			data->force_assign(updated);
-			const auto id = updated.id();
-			state->links = owner->chatsFilters().chatlistLinks(id);
-			ExportFilterLink(id, shared, crl::guard(box, [=](
-					Data::ChatFilterLink link) {
-				Expects(link.id == id);
-
-				*data = data->current().withChatlist(true, true);
-				window->show(ShowLinkBox(window, updated, link));
-			}), crl::guard(box, [=](QString error) {
-				const auto session = &window->session();
-				if (error == u"CHATLISTS_TOO_MUCH"_q) {
-					window->show(Box(ShareableFiltersLimitBox, session));
-				} else if (error == u"INVITES_TOO_MUCH"_q) {
-					window->show(Box(FilterLinksLimitBox, session));
-				} else if (error == u"CHANNELS_TOO_MUCH"_q) {
-					window->show(Box(ChannelsLimitBox, session));
-				} else if (error == u"USER_CHANNELS_TOO_MUCH"_q) {
-					window->showToast(
-						{ tr::lng_filters_link_group_admin_error(tr::now) });
-				} else {
-					window->show(ShowLinkBox(window, updated, { .id = id }));
-				}
+					*data = data->current().withChatlist(true, true);
+					window->show(ShowLinkBox(window, updated, link));
+				}), crl::guard(box, [=](QString error) {
+					const auto session = &window->session();
+					if (error == u"CHATLISTS_TOO_MUCH"_q) {
+						window->show(Box(ShareableFiltersLimitBox, session));
+					} else if (error == u"INVITES_TOO_MUCH"_q) {
+						window->show(Box(FilterLinksLimitBox, session));
+					} else if (error == u"CHANNELS_TOO_MUCH"_q) {
+						window->show(Box(ChannelsLimitBox, session));
+					} else if (error == u"USER_CHANNELS_TOO_MUCH"_q) {
+						window->showToast(
+							{ tr::lng_filters_link_group_admin_error(tr::now) });
+					} else {
+						window->show(ShowLinkBox(window, updated, { .id = id }));
+					}
+				}));
 			}));
-		}));
-	}, createLink->lifetime());
-	Ui::AddSkip(content);
-	Ui::AddDividerText(
-		content,
-		rpl::conditional(
-			state->hasLinks.value(),
-			tr::lng_filters_link_about_many(),
-			tr::lng_filters_link_about()));
+		}, createLink->lifetime());
+		Ui::AddSkip(content);
+		Ui::AddDividerText(
+			content,
+			rpl::conditional(
+				state->hasLinks.value(),
+				tr::lng_filters_link_about_many(),
+				tr::lng_filters_link_about()));
+	}
 
 	const auto show = box->uiShow();
 	const auto refreshPreviews = [=] {
@@ -1145,6 +1147,11 @@ void EditExistingFilter(
 	}
 	const auto doneCallback = [=](const Data::ChatFilter &result) {
 		Expects(id == result.id());
+
+		if (Data::IsLocalFilterId(id)) {
+			session->data().chatsFilters().saveLocalFolder(result);
+			return;
+		}
 
 		// AyuGram: Save color locally for non-premium users
 		// so it persists after server strips it.

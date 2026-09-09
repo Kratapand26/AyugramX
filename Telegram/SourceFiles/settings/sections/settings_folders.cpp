@@ -383,10 +383,9 @@ not_null<Ui::VerticalLayout*> SetupFoldersList(
 		return &*i;
 	};
 	const auto showLimitReached = [=] {
-		const auto removed = ranges::count_if(
-			state->rows,
-			&FilterRow::removed);
-		const auto count = int(state->rows.size() - removed);
+		const auto count = int(ranges::count_if(state->rows, [](const FilterRow &r) {
+			return !r.removed && !Data::IsLocalFilterId(r.filter.id());
+		}));
 		if (count < limit()) {
 			return false;
 		}
@@ -599,6 +598,38 @@ not_null<Ui::VerticalLayout*> SetupFoldersList(
 			crl::guard(container, saveAnd)));
 	});
 
+	const auto createLocalButton = AddButtonWithIcon(
+		container,
+		u"Create Local Folder"_q,
+		st::settingsButtonActive,
+		{ &st::settingsIconAdd, IconType::Round, &st::windowBgActive });
+	createLocalButton->setClickedCallback([=] {
+		const auto filters = &session->data().chatsFilters();
+		const auto nextId = filters->nextLocalCustomId();
+		const auto created = std::make_shared<FilterRowButton*>(nullptr);
+		const auto doneCallback = [=](const Data::ChatFilter &result) {
+			filters->saveLocalFolder(result);
+			if (const auto button = *created) {
+				find(button)->filter = result;
+				button->updateData(result);
+			} else {
+				*created = addFilter(result);
+			}
+		};
+		const auto saveAnd = [=](
+				const Data::ChatFilter &data,
+				Fn<void(Data::ChatFilter)> next) {
+			doneCallback(data);
+			next(data);
+		};
+		controller->window().show(Box(
+			EditFilterBox,
+			controller,
+			Data::ChatFilter(nextId, {}, {}, {}, {}, {}, {}, {}),
+			crl::guard(container, doneCallback),
+			crl::guard(container, saveAnd)));
+	});
+
 	const auto prepareGoodIdsForNewFilters = [=] {
 		const auto &list = session->data().chatsFilters().list();
 
@@ -613,7 +644,7 @@ not_null<Ui::VerticalLayout*> SetupFoldersList(
 		auto result = base::flat_map<not_null<FilterRowButton*>, FilterId>();
 		for (auto &row : state->rows) {
 			const auto id = row.filter.id();
-			if (row.removed) {
+			if (row.removed || Data::IsLocalFilterId(id)) {
 				continue;
 			} else if (!id
 				|| !ranges::contains(list, id, &Data::ChatFilter::id)) {
@@ -645,6 +676,15 @@ not_null<Ui::VerticalLayout*> SetupFoldersList(
 			}
 			const auto id = row.filter.id();
 			const auto removed = row.removed;
+			if (Data::IsLocalFilterId(id)) {
+				if (removed) {
+					session->data().chatsFilters().deleteLocalFolder(id);
+				} else {
+					session->data().chatsFilters().saveLocalFolder(row.filter);
+					order.push_back(id);
+				}
+				continue;
+			}
 			const auto i = ranges::find(list, id, &Data::ChatFilter::id);
 			if (removed && (i == end(list) || id == FilterId(0))) {
 				continue;
@@ -778,7 +818,7 @@ not_null<Ui::VerticalLayout*> SetupFoldersList(
 			sendRequests(removeRequests);
 			sendRequests(removeChatlistRequests);
 			sendRequests(addRequests);
-			if (!order.empty() && !addRequests.empty()) {
+			if (!order.empty()) {
 				filters->saveOrder(order, previousId);
 			}
 			checkFinished();
@@ -800,10 +840,9 @@ void SetupRecommendedSection(
 	};
 
 	const auto showLimitReached = [=] {
-		const auto removed = ranges::count_if(
-			state->rows,
-			&FilterRow::removed);
-		const auto count = int(state->rows.size() - removed);
+		const auto count = int(ranges::count_if(state->rows, [](const FilterRow &r) {
+			return !r.removed && !Data::IsLocalFilterId(r.filter.id());
+		}));
 		if (count < limit()) {
 			return false;
 		}
@@ -1004,6 +1043,44 @@ void BuildFoldersListSection(
 			state,
 			ctx.highlights,
 			wrap);
+		return SectionBuilder::WidgetToAdd{};
+	});
+}
+
+void BuildLocalPresetsSection(
+		SectionBuilder &builder,
+		not_null<FoldersState*> state) {
+	builder.addDivider();
+	builder.addSkip();
+	builder.addSubsectionTitle(u"Quick Local Folders"_q);
+
+	builder.add([=](const WidgetContext &ctx) {
+		const auto container = ctx.container;
+		const auto session = &ctx.controller->session();
+		const auto filters = &session->data().chatsFilters();
+		const auto userId = session->userId().bare;
+		const auto &settings = AyuSettings::getInstance();
+
+		const auto addToggle = [&](LocalFolderPreset preset, const QString &label) {
+			const auto checkbox = container->add(
+				object_ptr<Ui::Checkbox>(
+					container,
+					label,
+					settings.localFolderPresetEnabled(userId, preset),
+					st::defaultCheckbox),
+				st::settingsCheckboxPadding);
+			checkbox->checkedChanges() | rpl::on_next([=](bool checked) {
+				filters->toggleLocalPreset(preset, checked);
+			}, checkbox->lifetime());
+		};
+
+		addToggle(LocalFolderPreset::Users, tr::lng_filters_type_contacts(tr::now));
+		addToggle(LocalFolderPreset::Groups, tr::lng_filters_type_groups(tr::now));
+		addToggle(LocalFolderPreset::Channels, tr::lng_filters_type_channels(tr::now));
+		addToggle(LocalFolderPreset::Bots, tr::lng_filters_type_bots(tr::now));
+		addToggle(LocalFolderPreset::Unread, tr::lng_filters_name_unread(tr::now));
+		addToggle(LocalFolderPreset::Admin, u"Admin"_q);
+
 		return SectionBuilder::WidgetToAdd{};
 	});
 }
@@ -1245,6 +1322,7 @@ void Folders::setupContent() {
 
 		BuildTopContent(builder, std::move(showFinishedDup));
 		BuildFoldersListSection(builder, state.get());
+		BuildLocalPresetsSection(builder, state.get());
 		BuildTagsSection(builder, state.get());
 		BuildViewSection(builder);
 

@@ -14,6 +14,29 @@
 
 #include <map>
 #include <unordered_set>
+#include <vector>
+#include <optional>
+#include <QtCore/QString>
+
+enum class LocalFolderPreset {
+	Users = 1,
+	Groups = 2,
+	Channels = 3,
+	Bots = 4,
+	Unread = 5,
+	Admin = 6,
+};
+
+struct LocalCustomFolder {
+	int id = 0;
+	QString title;
+	QString iconEmoji;
+	std::optional<int> colorIndex;
+	uint32 flags = 0;
+	std::vector<uint64> always;
+	std::vector<uint64> pinned;
+	std::vector<uint64> never;
+};
 
 
 namespace Main {
@@ -359,6 +382,16 @@ public:
 	void setLocalFolderTagsEnabled(uint64 userId, bool val);
 	[[nodiscard]] std::optional<int> customFolderColor(uint64 userId, int filterId) const;
 	void setCustomFolderColor(uint64 userId, int filterId, std::optional<int> colorIndex);
+
+	// AyuGram: Local Folders
+	[[nodiscard]] bool localFolderPresetEnabled(uint64 userId, LocalFolderPreset preset) const;
+	void setLocalFolderPresetEnabled(uint64 userId, LocalFolderPreset preset, bool val);
+	[[nodiscard]] const std::vector<LocalCustomFolder> &localCustomFolders(uint64 userId) const;
+	void setLocalCustomFolders(uint64 userId, const std::vector<LocalCustomFolder> &folders);
+	void saveLocalCustomFolder(uint64 userId, const LocalCustomFolder &folder);
+	void removeLocalCustomFolder(uint64 userId, int filterId);
+	[[nodiscard]] std::vector<int> localFolderOrder(uint64 userId) const;
+	void setLocalFolderOrder(uint64 userId, const std::vector<int> &order);
 
 	void setSaveDeletedMessages(bool val);
 	void setSaveMessagesHistory(bool val);
@@ -729,6 +762,14 @@ private:
 		std::map<int, int> colors; // filterId -> colorIndex
 	};
 	std::map<uint64, LocalFolderTagSettings> _localFolderTags;
+
+	// AyuGram: Per-account local folders settings
+	struct UserLocalFolders {
+		std::unordered_set<int> enabledPresets;
+		std::vector<LocalCustomFolder> customFolders;
+		std::vector<int> order;
+	};
+	std::map<uint64, UserLocalFolders> _localFolders;
 };
 
 void to_json(nlohmann::json &j, const AyuSettings &s);

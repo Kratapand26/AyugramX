@@ -388,11 +388,23 @@ bool ChatFilter::contains(
 		// group nor a channel); it can only be included explicitly by id.
 		return _always.contains(history);
 	}
+	const auto isAdmin = [&] {
+		const auto peer = history->peer;
+		if (const auto chat = peer->asChat()) {
+			return chat->amCreator() || chat->hasAdminRights();
+		} else if (const auto channel = peer->asChannel()) {
+			return channel->amCreator() || channel->hasAdminRights();
+		}
+		return false;
+	};
+	const auto typeMatch = (_flags & flag)
+		|| ((_flags & Flag::Admin) && isAdmin());
+
 	const auto state = (_flags & (Flag::NoMuted | Flag::NoRead))
 		? history->chatListBadgesState()
 		: Dialogs::BadgesState();
 	return false
-		|| ((_flags & flag)
+		|| (typeMatch
 			&& (!(_flags & Flag::NoMuted)
 				|| !history->muted()
 				|| (state.mention
@@ -411,7 +423,10 @@ ChatFilters::ChatFilters(not_null<Session*> owner)
 : _owner(owner)
 , _moreChatsTimer([=] { checkLoadMoreChatsLists(); }) {
 	_list.emplace_back();
-	crl::on_main(&owner->session(), [=] { load(); });
+	crl::on_main(&owner->session(), [=] {
+		applyLocalFilters();
+		load();
+	});
 
 	AyuSettings::getInstance().hideAllChatsFolderChanges()
 	| rpl::on_next([=](bool hide) {
@@ -576,9 +591,277 @@ void ChatFilters::requestToggleTagsLocal(bool value) {
 		_owner->session().userId().bare, value);
 }
 
+bool ChatFilters::isLocalPresetEnabled(LocalFolderPreset preset) const {
+	const auto userId = _owner->session().userId().bare;
+	return AyuSettings::getInstance().localFolderPresetEnabled(userId, preset);
+}
+
+ChatFilter ChatFilters::createPresetFilter(LocalFolderPreset preset) const {
+	switch (preset) {
+	case LocalFolderPreset::Users:
+		return ChatFilter(
+			kLocalFilterIdUsers,
+			ChatFilterTitle{ tr::lng_filters_type_contacts(tr::now) },
+			QString(),
+			std::nullopt,
+			Flag::Contacts | Flag::NonContacts,
+			{}, {}, {});
+	case LocalFolderPreset::Groups:
+		return ChatFilter(
+			kLocalFilterIdGroups,
+			ChatFilterTitle{ tr::lng_filters_type_groups(tr::now) },
+			QString(),
+			std::nullopt,
+			Flag::Groups,
+			{}, {}, {});
+	case LocalFolderPreset::Channels:
+		return ChatFilter(
+			kLocalFilterIdChannels,
+			ChatFilterTitle{ tr::lng_filters_type_channels(tr::now) },
+			QString(),
+			std::nullopt,
+			Flag::Channels,
+			{}, {}, {});
+	case LocalFolderPreset::Bots:
+		return ChatFilter(
+			kLocalFilterIdBots,
+			ChatFilterTitle{ tr::lng_filters_type_bots(tr::now) },
+			QString(),
+			std::nullopt,
+			Flag::Bots,
+			{}, {}, {});
+	case LocalFolderPreset::Unread:
+		return ChatFilter(
+			kLocalFilterIdUnread,
+			ChatFilterTitle{ tr::lng_filters_name_unread(tr::now) },
+			QString(),
+			std::nullopt,
+			Flag::Contacts | Flag::NonContacts | Flag::Groups | Flag::Channels | Flag::Bots | Flag::NoRead,
+			{}, {}, {});
+	case LocalFolderPreset::Admin:
+		return ChatFilter(
+			kLocalFilterIdAdmin,
+			ChatFilterTitle{ u"Admin"_q },
+			QString(),
+			std::nullopt,
+			Flag::Admin,
+			{}, {}, {});
+	}
+	return ChatFilter();
+}
+
+void ChatFilters::toggleLocalPreset(LocalFolderPreset preset, bool enabled) {
+	const auto userId = _owner->session().userId().bare;
+	auto &settings = AyuSettings::getInstance();
+	settings.setLocalFolderPresetEnabled(userId, preset, enabled);
+
+	const auto filterId = [&] {
+		switch (preset) {
+		case LocalFolderPreset::Users: return kLocalFilterIdUsers;
+		case LocalFolderPreset::Groups: return kLocalFilterIdGroups;
+		case LocalFolderPreset::Channels: return kLocalFilterIdChannels;
+		case LocalFolderPreset::Bots: return kLocalFilterIdBots;
+		case LocalFolderPreset::Unread: return kLocalFilterIdUnread;
+		case LocalFolderPreset::Admin: return kLocalFilterIdAdmin;
+		}
+		return FilterId(0);
+	}();
+	if (!filterId) {
+		return;
+	}
+
+	if (enabled) {
+		const auto it = ranges::find(_list, filterId, &ChatFilter::id);
+		if (it == end(_list)) {
+			applyInsert(createPresetFilter(preset), _list.size());
+			_listChanged.fire({});
+		}
+	} else {
+		remove(filterId);
+	}
+}
+
+FilterId ChatFilters::nextLocalCustomId() const {
+	auto id = kLocalCustomFilterIdBase;
+	while (ranges::contains(_list, id, &ChatFilter::id)) {
+		++id;
+	}
+	return id;
+}
+
+void ChatFilters::saveLocalFolder(const ChatFilter &filter) {
+	const auto id = filter.id();
+	if (!IsLocalFilterId(id)) {
+		return;
+	}
+	const auto userId = _owner->session().userId().bare;
+	auto &settings = AyuSettings::getInstance();
+
+	auto alwaysPeers = std::vector<uint64>();
+	for (const auto h : filter.always()) {
+		alwaysPeers.push_back(h->peer->id.value);
+	}
+	auto pinnedPeers = std::vector<uint64>();
+	for (const auto h : filter.pinned()) {
+		pinnedPeers.push_back(h->peer->id.value);
+	}
+	auto neverPeers = std::vector<uint64>();
+	for (const auto h : filter.never()) {
+		neverPeers.push_back(h->peer->id.value);
+	}
+
+	LocalCustomFolder customFolder{
+		.id = id,
+		.title = filter.titleText().text,
+		.iconEmoji = filter.iconEmoji(),
+		.colorIndex = filter.colorIndex() ? std::make_optional(int(*filter.colorIndex())) : std::nullopt,
+		.flags = filter.flags().value(),
+		.always = std::move(alwaysPeers),
+		.pinned = std::move(pinnedPeers),
+		.never = std::move(neverPeers),
+	};
+	settings.saveLocalCustomFolder(userId, customFolder);
+
+	set(filter);
+}
+
+void ChatFilters::deleteLocalFolder(FilterId id) {
+	if (!IsLocalFilterId(id)) {
+		return;
+	}
+	const auto userId = _owner->session().userId().bare;
+	auto &settings = AyuSettings::getInstance();
+
+	if (id >= kLocalCustomFilterIdBase) {
+		settings.removeLocalCustomFolder(userId, id);
+	} else {
+		const auto preset = [&] {
+			switch (id) {
+			case kLocalFilterIdUsers: return LocalFolderPreset::Users;
+			case kLocalFilterIdGroups: return LocalFolderPreset::Groups;
+			case kLocalFilterIdChannels: return LocalFolderPreset::Channels;
+			case kLocalFilterIdBots: return LocalFolderPreset::Bots;
+			case kLocalFilterIdUnread: return LocalFolderPreset::Unread;
+			case kLocalFilterIdAdmin: return LocalFolderPreset::Admin;
+			}
+			return LocalFolderPreset(0);
+		}();
+		if (preset != LocalFolderPreset(0)) {
+			settings.setLocalFolderPresetEnabled(userId, preset, false);
+		}
+		settings.removeLocalCustomFolder(userId, id);
+	}
+	remove(id);
+}
+
+void ChatFilters::applyOrderLocally(const std::vector<FilterId> &order) {
+	auto changed = false;
+	auto begin = _list.begin(), end = _list.end();
+	for (const auto id : order) {
+		const auto i = ranges::find(begin, end, id, &ChatFilter::id);
+		if (i != end) {
+			if (i != begin) {
+				changed = true;
+				std::swap(*i, *begin);
+			}
+			++begin;
+		}
+	}
+	if (changed) {
+		_listChanged.fire({});
+	}
+}
+
+void ChatFilters::applyLocalFilters() {
+	const auto userId = _owner->session().userId().bare;
+	const auto &settings = AyuSettings::getInstance();
+
+	const auto checkPreset = [&](LocalFolderPreset preset, FilterId id) {
+		const auto enabled = settings.localFolderPresetEnabled(userId, preset);
+		const auto it = ranges::find(_list, id, &ChatFilter::id);
+		if (enabled && it == end(_list)) {
+			const auto &customs = settings.localCustomFolders(userId);
+			const auto cIt = ranges::find(customs, id, &LocalCustomFolder::id);
+			if (cIt != end(customs)) {
+				auto always = base::flat_set<not_null<History*>>();
+				for (const auto pId : cIt->always) always.insert(_owner->history(PeerId(pId)));
+				auto pinned = std::vector<not_null<History*>>();
+				for (const auto pId : cIt->pinned) pinned.push_back(_owner->history(PeerId(pId)));
+				auto never = base::flat_set<not_null<History*>>();
+				for (const auto pId : cIt->never) never.insert(_owner->history(PeerId(pId)));
+				applyInsert(ChatFilter(
+					id,
+					ChatFilterTitle{ cIt->title },
+					cIt->iconEmoji,
+					cIt->colorIndex ? std::make_optional(uint8(*cIt->colorIndex)) : std::nullopt,
+					ChatFilter::Flags::from_raw(cIt->flags),
+					std::move(always),
+					std::move(pinned),
+					std::move(never)), _list.size());
+			} else {
+				applyInsert(createPresetFilter(preset), _list.size());
+			}
+		} else if (!enabled && it != end(_list)) {
+			applyRemove(it - begin(_list));
+		}
+	};
+
+	checkPreset(LocalFolderPreset::Users, kLocalFilterIdUsers);
+	checkPreset(LocalFolderPreset::Groups, kLocalFilterIdGroups);
+	checkPreset(LocalFolderPreset::Channels, kLocalFilterIdChannels);
+	checkPreset(LocalFolderPreset::Bots, kLocalFilterIdBots);
+	checkPreset(LocalFolderPreset::Unread, kLocalFilterIdUnread);
+	checkPreset(LocalFolderPreset::Admin, kLocalFilterIdAdmin);
+
+	for (const auto &cf : settings.localCustomFolders(userId)) {
+		if (cf.id < kLocalCustomFilterIdBase) {
+			continue;
+		}
+		const auto it = ranges::find(_list, cf.id, &ChatFilter::id);
+		if (it == end(_list)) {
+			auto always = base::flat_set<not_null<History*>>();
+			for (const auto pId : cf.always) always.insert(_owner->history(PeerId(pId)));
+			auto pinned = std::vector<not_null<History*>>();
+			for (const auto pId : cf.pinned) pinned.push_back(_owner->history(PeerId(pId)));
+			auto never = base::flat_set<not_null<History*>>();
+			for (const auto pId : cf.never) never.insert(_owner->history(PeerId(pId)));
+
+			applyInsert(ChatFilter(
+				cf.id,
+				ChatFilterTitle{ cf.title },
+				cf.iconEmoji,
+				cf.colorIndex ? std::make_optional(uint8(*cf.colorIndex)) : std::nullopt,
+				ChatFilter::Flags::from_raw(cf.flags),
+				std::move(always),
+				std::move(pinned),
+				std::move(never)), _list.size());
+		}
+	}
+
+	const auto savedOrder = settings.localFolderOrder(userId);
+	if (!savedOrder.empty()) {
+		auto filterIds = std::vector<FilterId>();
+		filterIds.reserve(savedOrder.size());
+		for (const auto id : savedOrder) {
+			filterIds.push_back(id);
+		}
+		applyOrderLocally(filterIds);
+	}
+}
+
 void ChatFilters::received(const QVector<MTPDialogFilter> &list) {
 	// AyuGram hideAllChatsFolder
 	const auto &settings = AyuSettings::getInstance();
+
+	auto localFilters = std::vector<ChatFilter>();
+	for (auto it = _list.begin(); it != _list.end();) {
+		if (IsLocalFilterId(it->id())) {
+			localFilters.push_back(std::move(*it));
+			it = _list.erase(it);
+		} else {
+			++it;
+		}
+	}
 
 	auto position = 0;
 	auto changed = false;
@@ -611,6 +894,19 @@ void ChatFilters::received(const QVector<MTPDialogFilter> &list) {
 	if (!settings.hideAllChatsFolder() && !ranges::contains(begin(_list), end(_list), 0, &ChatFilter::id)) {
 		_list.insert(begin(_list), ChatFilter());
 	}
+
+	for (auto &localFilter : localFilters) {
+		const auto it = ranges::find(_list, localFilter.id(), &ChatFilter::id);
+		if (it == end(_list)) {
+			applyInsert(std::move(localFilter), _list.size());
+			changed = true;
+		} else {
+			applyChange(*it, std::move(localFilter));
+		}
+	}
+
+	applyLocalFilters();
+
 	if (changed || !_loaded || _reloading) {
 		_loaded = true;
 		_reloading = false;
@@ -898,36 +1194,35 @@ bool ChatFilters::applyChange(ChatFilter &filter, ChatFilter &&updated) {
 }
 
 bool ChatFilters::applyOrder(const QVector<MTPint> &order) {
-	if (order.size() != _list.size()) {
+	auto cloudCount = 0;
+	for (const auto &f : _list) {
+		if (!IsLocalFilterId(f.id())) {
+			++cloudCount;
+		}
+	}
+	if (order.size() != cloudCount) {
 		return false;
 	} else if (_list.empty()) {
 		return true;
 	}
-	auto indices = ranges::views::all(
-		_list
-	) | ranges::views::transform(
-		&ChatFilter::id
-	) | ranges::to_vector;
-	auto b = indices.begin(), e = indices.end();
-	for (const auto &id : order) {
-		const auto i = ranges::find(b, e, id.v);
-		if (i == e) {
-			return false;
-		} else if (i != b) {
-			std::swap(*i, *b);
-		}
-		++b;
-	}
 	auto changed = false;
-	auto begin = _list.begin(), end = _list.end();
+	auto target = _list.begin();
 	for (const auto &id : order) {
-		const auto i = ranges::find(begin, end, id.v, &ChatFilter::id);
-		Assert(i != end);
-		if (i != begin) {
-			changed = true;
-			std::swap(*i, *begin);
+		while (target != _list.end() && IsLocalFilterId(target->id())) {
+			++target;
 		}
-		++begin;
+		if (target == _list.end()) {
+			break;
+		}
+		const auto i = ranges::find(target, _list.end(), id.v, &ChatFilter::id);
+		if (i == _list.end()) {
+			return false;
+		}
+		if (i != target) {
+			changed = true;
+			std::swap(*i, *target);
+		}
+		++target;
 	}
 	if (changed) {
 		_listChanged.fire({});
@@ -973,17 +1268,31 @@ void ChatFilters::saveOrder(
 	if (after) {
 		_saveOrderAfterId = after;
 	}
+
+	// AyuGram: Save combined order to AyuSettings
+	auto &settings = AyuSettings::getInstance();
+	auto orderInts = std::vector<int>();
+	orderInts.reserve(order.size());
+	for (const auto id : order) {
+		orderInts.push_back(id);
+	}
+	settings.setLocalFolderOrder(_owner->session().userId().bare, orderInts);
+
+	// Apply full order locally
+	applyOrderLocally(order);
+
+	// Filter cloud IDs for Telegram MTProto server
+	auto cloudIds = QVector<MTPint>();
+	cloudIds.reserve(order.size());
+	for (const auto id : order) {
+		if (!IsLocalFilterId(id)) {
+			cloudIds.push_back(MTP_int(id));
+		}
+	}
+	const auto wrapped = MTP_vector<MTPint>(cloudIds);
+
 	const auto api = &_owner->session().api();
 	api->request(_saveOrderRequestId).cancel();
-
-	auto ids = QVector<MTPint>();
-	ids.reserve(order.size());
-	for (const auto id : order) {
-		ids.push_back(MTP_int(id));
-	}
-	const auto wrapped = MTP_vector<MTPint>(ids);
-
-	apply(MTP_updateDialogFilterOrder(wrapped));
 	_saveOrderRequestId = api->request(MTPmessages_UpdateDialogFiltersOrder(
 		wrapped
 	)).afterRequest(_saveOrderAfterId).send();

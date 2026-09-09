@@ -1099,6 +1099,70 @@ void AyuSettings::setCustomFolderColor(uint64 userId, int filterId, std::optiona
 	save();
 }
 
+bool AyuSettings::localFolderPresetEnabled(uint64 userId, LocalFolderPreset preset) const {
+	const auto it = _localFolders.find(userId);
+	return (it != _localFolders.end())
+		? (it->second.enabledPresets.count(static_cast<int>(preset)) > 0)
+		: false;
+}
+
+void AyuSettings::setLocalFolderPresetEnabled(uint64 userId, LocalFolderPreset preset, bool val) {
+	if (val) {
+		_localFolders[userId].enabledPresets.insert(static_cast<int>(preset));
+	} else {
+		auto it = _localFolders.find(userId);
+		if (it != _localFolders.end()) {
+			it->second.enabledPresets.erase(static_cast<int>(preset));
+		}
+	}
+	save();
+}
+
+const std::vector<LocalCustomFolder> &AyuSettings::localCustomFolders(uint64 userId) const {
+	static const auto kEmpty = std::vector<LocalCustomFolder>();
+	const auto it = _localFolders.find(userId);
+	return (it != _localFolders.end()) ? it->second.customFolders : kEmpty;
+}
+
+void AyuSettings::setLocalCustomFolders(uint64 userId, const std::vector<LocalCustomFolder> &folders) {
+	_localFolders[userId].customFolders = folders;
+	save();
+}
+
+void AyuSettings::saveLocalCustomFolder(uint64 userId, const LocalCustomFolder &folder) {
+	auto &customs = _localFolders[userId].customFolders;
+	const auto it = std::find_if(customs.begin(), customs.end(), [&](const LocalCustomFolder &f) {
+		return f.id == folder.id;
+	});
+	if (it != customs.end()) {
+		*it = folder;
+	} else {
+		customs.push_back(folder);
+	}
+	save();
+}
+
+void AyuSettings::removeLocalCustomFolder(uint64 userId, int filterId) {
+	auto it = _localFolders.find(userId);
+	if (it != _localFolders.end()) {
+		auto &customs = it->second.customFolders;
+		customs.erase(std::remove_if(customs.begin(), customs.end(), [&](const LocalCustomFolder &f) {
+			return f.id == filterId;
+		}), customs.end());
+	}
+	save();
+}
+
+std::vector<int> AyuSettings::localFolderOrder(uint64 userId) const {
+	const auto it = _localFolders.find(userId);
+	return (it != _localFolders.end()) ? it->second.order : std::vector<int>();
+}
+
+void AyuSettings::setLocalFolderOrder(uint64 userId, const std::vector<int> &order) {
+	_localFolders[userId].order = order;
+	save();
+}
+
 void to_json(nlohmann::json &j, const AyuSettings &s) {
 	auto ghostAccounts = nlohmann::json::object();
 	for (const auto &[key, value] : s._ghostAccounts) {
@@ -1211,6 +1275,45 @@ void to_json(nlohmann::json &j, const AyuSettings &s) {
 		};
 	}
 	j["localFolderTags"] = folderTags;
+
+	// AyuGram: Serialize local folders
+	auto localFoldersJson = nlohmann::json::object();
+	for (const auto &[userId, uFolders] : s._localFolders) {
+		auto presetsJson = nlohmann::json::array();
+		for (const auto p : uFolders.enabledPresets) {
+			presetsJson.push_back(p);
+		}
+		auto customsJson = nlohmann::json::array();
+		for (const auto &cf : uFolders.customFolders) {
+			auto alwaysJson = nlohmann::json::array();
+			for (const auto id : cf.always) alwaysJson.push_back(id);
+			auto pinnedJson = nlohmann::json::array();
+			for (const auto id : cf.pinned) pinnedJson.push_back(id);
+			auto neverJson = nlohmann::json::array();
+			for (const auto id : cf.never) neverJson.push_back(id);
+
+			customsJson.push_back({
+				{"id", cf.id},
+				{"title", cf.title.toStdString()},
+				{"iconEmoji", cf.iconEmoji.toStdString()},
+				{"colorIndex", cf.colorIndex.has_value() ? nlohmann::json(*cf.colorIndex) : nlohmann::json(nullptr)},
+				{"flags", cf.flags},
+				{"always", alwaysJson},
+				{"pinned", pinnedJson},
+				{"never", neverJson}
+			});
+		}
+		auto orderJson = nlohmann::json::array();
+		for (const auto o : uFolders.order) {
+			orderJson.push_back(o);
+		}
+		localFoldersJson[std::to_string(userId)] = {
+			{"presets", presetsJson},
+			{"customs", customsJson},
+			{"order", orderJson}
+		};
+	}
+	j["localFolders"] = localFoldersJson;
 }
 
 void from_json(const nlohmann::json &j, AyuSettings &s) {
@@ -1330,6 +1433,59 @@ void from_json(const nlohmann::json &j, AyuSettings &s) {
 				}
 			}
 			s._localFolderTags[std::stoull(key)] = std::move(tagSettings);
+		}
+	}
+
+	// AyuGram: Deserialize local folders
+	if (j.contains("localFolders") && j["localFolders"].is_object()) {
+		s._localFolders.clear();
+		for (const auto &[key, value] : j["localFolders"].items()) {
+			AyuSettings::UserLocalFolders uFolders;
+			if (value.contains("presets") && value["presets"].is_array()) {
+				for (const auto &p : value["presets"]) {
+					if (p.is_number_integer()) {
+						uFolders.enabledPresets.insert(p.get<int>());
+					}
+				}
+			}
+			if (value.contains("customs") && value["customs"].is_array()) {
+				for (const auto &c : value["customs"]) {
+					LocalCustomFolder cf;
+					cf.id = c.value("id", 0);
+					cf.title = QString::fromStdString(c.value("title", ""));
+					cf.iconEmoji = QString::fromStdString(c.value("iconEmoji", ""));
+					if (c.contains("colorIndex") && c["colorIndex"].is_number_integer()) {
+						cf.colorIndex = c["colorIndex"].get<int>();
+					}
+					cf.flags = c.value("flags", 0u);
+					if (c.contains("always") && c["always"].is_array()) {
+						for (const auto &a : c["always"]) {
+							if (a.is_number_unsigned()) cf.always.push_back(a.get<uint64>());
+						}
+					}
+					if (c.contains("pinned") && c["pinned"].is_array()) {
+						for (const auto &p : c["pinned"]) {
+							if (p.is_number_unsigned()) cf.pinned.push_back(p.get<uint64>());
+						}
+					}
+					if (c.contains("never") && c["never"].is_array()) {
+						for (const auto &n : c["never"]) {
+							if (n.is_number_unsigned()) cf.never.push_back(n.get<uint64>());
+						}
+					}
+					if (cf.id >= 1000) {
+						uFolders.customFolders.push_back(std::move(cf));
+					}
+				}
+			}
+			if (value.contains("order") && value["order"].is_array()) {
+				for (const auto &o : value["order"]) {
+					if (o.is_number_integer()) {
+						uFolders.order.push_back(o.get<int>());
+					}
+				}
+			}
+			s._localFolders[std::stoull(key)] = std::move(uFolders);
 		}
 	}
 }

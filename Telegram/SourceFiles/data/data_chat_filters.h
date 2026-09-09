@@ -36,6 +36,21 @@ struct ChatFilterTitle {
 
 [[nodiscard]] TextWithEntities ForceCustomEmojiStatic(TextWithEntities text);
 
+inline constexpr FilterId kLocalFilterIdBase = 1000;
+inline constexpr FilterId kLocalFilterIdUsers = 1001;
+inline constexpr FilterId kLocalFilterIdGroups = 1002;
+inline constexpr FilterId kLocalFilterIdChannels = 1003;
+inline constexpr FilterId kLocalFilterIdBots = 1004;
+inline constexpr FilterId kLocalFilterIdUnread = 1005;
+inline constexpr FilterId kLocalFilterIdAdmin = 1006;
+inline constexpr FilterId kLocalCustomFilterIdBase = 1100;
+
+[[nodiscard]] inline bool IsLocalFilterId(FilterId id) {
+	return id >= kLocalFilterIdBase;
+}
+
+enum class LocalFolderPreset;
+
 class ChatFilter final {
 public:
 	enum class Flag : ushort {
@@ -55,6 +70,8 @@ public:
 
 		NewChats      = (1 << 11), // Telegram Business exceptions.
 		ExistingChats = (1 << 12),
+
+		Admin         = (1 << 13),
 	};
 	friend constexpr inline bool is_flag_type(Flag) { return true; };
 	using Flags = base::flags<Flag>;
@@ -216,6 +233,16 @@ public:
 	[[nodiscard]] rpl::producer<bool> tagsEnabledChanges() const;
 	void requestToggleTags(bool value, Fn<void()> fail);
 	void requestToggleTagsLocal(bool value);
+
+	// AyuGram: Local Folders
+	void applyLocalFilters();
+	void toggleLocalPreset(LocalFolderPreset preset, bool enabled);
+	[[nodiscard]] bool isLocalPresetEnabled(LocalFolderPreset preset) const;
+	void saveLocalFolder(const ChatFilter &filter);
+	void deleteLocalFolder(FilterId id);
+	[[nodiscard]] FilterId nextLocalCustomId() const;
+	void applyOrderLocally(const std::vector<FilterId> &order);
+	[[nodiscard]] ChatFilter createPresetFilter(LocalFolderPreset preset) const;
 
 private:
 	struct MoreChatsData {

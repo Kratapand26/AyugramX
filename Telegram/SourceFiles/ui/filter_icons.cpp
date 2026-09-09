@@ -329,6 +329,8 @@ FilterIcon ComputeDefaultFilterIcon(const Data::ChatFilter &filter) {
 		return Icon::Unread;
 	} else if ((filter.flags() & removed) == Flag::NoMuted) {
 		return Icon::Unmuted;
+	} else if (filter.flags() & Flag::Admin) {
+		return Icon::Setup;
 	}
 	return Icon::Custom;
 }

@@ -168,6 +168,31 @@ void ChangeFilterById(
 		const auto was = *i;
 		const auto filter = ChangedFilter(was, history, add);
 		history->owner().chatsFilters().set(filter);
+		if (Data::IsLocalFilterId(filter.id())) {
+			history->owner().chatsFilters().saveLocalFolder(filter);
+			const auto name = filter.title();
+			const auto chat = history->peer->name();
+			const auto account = not_null(&history->session().account());
+			if (const auto controller = Core::App().windowFor(account)) {
+				const auto isStatic = name.isStatic;
+				controller->showToast({
+					.text = (add
+						? tr::lng_filters_toast_add
+						: tr::lng_filters_toast_remove)(
+							tr::now,
+							lt_chat,
+							tr::bold(chat),
+							lt_folder,
+							Ui::Text::Wrapped(name.text, EntityType::Bold),
+							tr::marked),
+					.textContext = Core::TextContext({
+						.session = &history->session(),
+						.customEmojiLoopLimit = isStatic ? -1 : 0,
+					}),
+				});
+			}
+			return;
+		}
 		history->session().api().request(MTPmessages_UpdateDialogFilter(
 			MTP_flags(MTPmessages_UpdateDialogFilter::Flag::f_filter),
 			MTP_int(filter.id()),
