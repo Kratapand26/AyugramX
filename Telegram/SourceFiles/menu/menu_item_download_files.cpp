@@ -357,9 +357,7 @@ void AddDownloadFilesAction(
 	auto docs = Documents();
 	auto photos = Photos();
 	for (const auto &item : items) {
-		if (!Added(item, docs, photos)) {
-			return;
-		}
+		Added(item, docs, photos);
 	}
 	
 	if (docs.empty() && photos.empty()) {
