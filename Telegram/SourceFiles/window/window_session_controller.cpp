@@ -2590,16 +2590,6 @@ void SessionController::pushChatHistory(ChatHistoryEntry entry) {
 			_chatHistory[_chatHistoryIndex].msgId = entry.msgId;
 			return;
 		}
-		// If we are alternating to the previous chat, step backwards
-		// instead of pushing a new entry. This prevents infinite stack
-		// growth when clicking back and forth between two chats.
-		if (_chatHistoryIndex > 0 && _chatHistory[_chatHistoryIndex - 1].key == entry.key) {
-			_chatHistoryIndex--;
-			_chatHistory[_chatHistoryIndex].msgId = entry.msgId;
-			_canGoBackInChatHistoryChanges.fire(canGoBackInChatHistory());
-			_canGoForwardInChatHistoryChanges.fire(canGoForwardInChatHistory());
-			return;
-		}
 		// If we navigate to the exact next chat, step forwards
 		// instead of truncating. This prevents the forward button
 		// from vanishing due to delayed asynchronous UI events.
