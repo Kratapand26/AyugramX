@@ -600,7 +600,7 @@ not_null<Ui::VerticalLayout*> SetupFoldersList(
 
 	const auto createLocalButton = AddButtonWithIcon(
 		container,
-		u"Create Local Folder"_q,
+		rpl::single(u"Create Local Folder"_q),
 		st::settingsButtonActive,
 		{ &st::settingsIconAdd, IconType::Round, &st::windowBgActive });
 	createLocalButton->setClickedCallback([=] {
@@ -1052,7 +1052,7 @@ void BuildLocalPresetsSection(
 		not_null<FoldersState*> state) {
 	builder.addDivider();
 	builder.addSkip();
-	builder.addSubsectionTitle(u"Quick Local Folders"_q);
+	builder.addSubsectionTitle(rpl::single(u"Quick Local Folders"_q));
 
 	builder.add([=](const WidgetContext &ctx) {
 		const auto container = ctx.container;

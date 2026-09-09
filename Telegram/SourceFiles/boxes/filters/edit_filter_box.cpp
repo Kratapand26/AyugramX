@@ -812,7 +812,6 @@ void EditFilterBox(
 			anim::type::instant);
 
 		const auto &padding = st::defaultSubsectionTitlePadding;
-		const auto isPremium = session->premium();
 		const auto titleWrap = colors->add(
 			object_ptr<Ui::FixedHeightWidget>(
 				colors,

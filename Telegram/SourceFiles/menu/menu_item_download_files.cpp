@@ -91,7 +91,7 @@ using Photos = std::vector<std::pair<not_null<PhotoData*>, FullMsgId>>;
 	return QString("%1- %2").arg(number).arg(name);
 }
 
-[[nodiscard]] bool Added(
+void Added(
 		HistoryItem *item,
 		Documents &documents,
 		Photos &photos) {
@@ -100,15 +100,13 @@ using Photos = std::vector<std::pair<not_null<PhotoData*>, FullMsgId>>;
 			const bool isForum = (item->topicRootId() != 0);
 			if (const auto photo = media->photo()) {
 				photos.emplace_back(photo, item->fullId());
-				return true;
 			} else if (const auto document = media->document()) {
-				if (isForum && document->sticker()) return false;
-				documents.emplace_back(document, item->fullId());
-				return true;
+				if (!isForum || !document->sticker()) {
+					documents.emplace_back(document, item->fullId());
+				}
 			}
 		}
 	}
-	return false;
 }
 
 void AddAction(
