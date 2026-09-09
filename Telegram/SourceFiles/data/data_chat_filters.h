@@ -21,7 +21,11 @@ namespace Ui {
 struct MoreChatsBarContent;
 } // namespace Ui
 
+enum class LocalFolderPreset;
+
 namespace Data {
+
+using ::LocalFolderPreset;
 
 class Session;
 
@@ -48,8 +52,6 @@ inline constexpr FilterId kLocalCustomFilterIdBase = 1100;
 [[nodiscard]] inline bool IsLocalFilterId(FilterId id) {
 	return id >= kLocalFilterIdBase;
 }
-
-enum class LocalFolderPreset;
 
 class ChatFilter final {
 public:

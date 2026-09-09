@@ -27,6 +27,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 // AyuGram includes
 #include "ayu/ayu_settings.h"
+#include "lang/lang_keys.h"
 
 
 namespace Data {
@@ -597,6 +598,10 @@ bool ChatFilters::isLocalPresetEnabled(LocalFolderPreset preset) const {
 }
 
 ChatFilter ChatFilters::createPresetFilter(LocalFolderPreset preset) const {
+	using Flag = ChatFilter::Flag;
+	const auto emptyAlways = base::flat_set<not_null<History*>>();
+	const auto emptyPinned = std::vector<not_null<History*>>();
+	const auto emptyNever = base::flat_set<not_null<History*>>();
 	switch (preset) {
 	case LocalFolderPreset::Users:
 		return ChatFilter(
@@ -605,7 +610,9 @@ ChatFilter ChatFilters::createPresetFilter(LocalFolderPreset preset) const {
 			QString(),
 			std::nullopt,
 			Flag::Contacts | Flag::NonContacts,
-			{}, {}, {});
+			emptyAlways,
+			emptyPinned,
+			emptyNever);
 	case LocalFolderPreset::Groups:
 		return ChatFilter(
 			kLocalFilterIdGroups,
@@ -613,7 +620,9 @@ ChatFilter ChatFilters::createPresetFilter(LocalFolderPreset preset) const {
 			QString(),
 			std::nullopt,
 			Flag::Groups,
-			{}, {}, {});
+			emptyAlways,
+			emptyPinned,
+			emptyNever);
 	case LocalFolderPreset::Channels:
 		return ChatFilter(
 			kLocalFilterIdChannels,
@@ -621,7 +630,9 @@ ChatFilter ChatFilters::createPresetFilter(LocalFolderPreset preset) const {
 			QString(),
 			std::nullopt,
 			Flag::Channels,
-			{}, {}, {});
+			emptyAlways,
+			emptyPinned,
+			emptyNever);
 	case LocalFolderPreset::Bots:
 		return ChatFilter(
 			kLocalFilterIdBots,
@@ -629,7 +640,9 @@ ChatFilter ChatFilters::createPresetFilter(LocalFolderPreset preset) const {
 			QString(),
 			std::nullopt,
 			Flag::Bots,
-			{}, {}, {});
+			emptyAlways,
+			emptyPinned,
+			emptyNever);
 	case LocalFolderPreset::Unread:
 		return ChatFilter(
 			kLocalFilterIdUnread,
@@ -637,7 +650,9 @@ ChatFilter ChatFilters::createPresetFilter(LocalFolderPreset preset) const {
 			QString(),
 			std::nullopt,
 			Flag::Contacts | Flag::NonContacts | Flag::Groups | Flag::Channels | Flag::Bots | Flag::NoRead,
-			{}, {}, {});
+			emptyAlways,
+			emptyPinned,
+			emptyNever);
 	case LocalFolderPreset::Admin:
 		return ChatFilter(
 			kLocalFilterIdAdmin,
@@ -645,7 +660,9 @@ ChatFilter ChatFilters::createPresetFilter(LocalFolderPreset preset) const {
 			QString(),
 			std::nullopt,
 			Flag::Admin,
-			{}, {}, {});
+			emptyAlways,
+			emptyPinned,
+			emptyNever);
 	}
 	return ChatFilter();
 }
@@ -735,7 +752,7 @@ void ChatFilters::deleteLocalFolder(FilterId id) {
 	if (id >= kLocalCustomFilterIdBase) {
 		settings.removeLocalCustomFolder(userId, id);
 	} else {
-		const auto preset = [&] {
+		const auto preset = [&]() -> std::optional<LocalFolderPreset> {
 			switch (id) {
 			case kLocalFilterIdUsers: return LocalFolderPreset::Users;
 			case kLocalFilterIdGroups: return LocalFolderPreset::Groups;
@@ -744,10 +761,10 @@ void ChatFilters::deleteLocalFolder(FilterId id) {
 			case kLocalFilterIdUnread: return LocalFolderPreset::Unread;
 			case kLocalFilterIdAdmin: return LocalFolderPreset::Admin;
 			}
-			return LocalFolderPreset(0);
+			return std::nullopt;
 		}();
-		if (preset != LocalFolderPreset(0)) {
-			settings.setLocalFolderPresetEnabled(userId, preset, false);
+		if (preset) {
+			settings.setLocalFolderPresetEnabled(userId, *preset, false);
 		}
 		settings.removeLocalCustomFolder(userId, id);
 	}
