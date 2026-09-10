@@ -206,6 +206,12 @@ jobs:
             Remove-Item -Force "out\CMakeCache.txt"
             Write-Host "Removed stale CMakeCache.txt."
           }
+          # Remove stale binary outputs (.pdb, .ilk, .exe) restored from previous build cache.
+          # When MSVC link.exe finds an existing PDB from a previous run, it attempts an
+          # incremental update by appending stream pages without freeing old ones, fragmenting
+          # the MSF page table and exceeding the 4GB capacity limit (fatal error LNK1140).
+          Get-ChildItem -Path "out" -Include "*.pdb","*.ilk","*.exe" -Recurse -Force -ErrorAction SilentlyContinue | Remove-Item -Force
+          Write-Host "Purged stale PDB, ILK, and EXE files from build cache."
  
       - name: Configure CMake
         env:
@@ -264,8 +270,8 @@ jobs:
         run: |
           $configPath = "$env:RUNNER_TEMP\rclone.conf"
           $cacheFile = "build_cache-msvc14.44-qt6-lto.zip"
-          Write-Host "Compressing out/ directory..."
-          7z a -tzip -mx=1 $cacheFile out\ -bsp1
+          Write-Host "Compressing out/ directory (excluding binaries & debug symbols)..."
+          7z a -tzip -mx=1 $cacheFile out\ "-xr!*.pdb" "-xr!*.ilk" "-xr!*.exe" -bsp1
           Write-Host "Pushing build cache to Google Drive ($cacheFile)..."
           rclone --config $configPath copyto "$cacheFile" "gdrive:$cacheFile" --progress 2>&1
           if ($LASTEXITCODE -ne 0) {
