@@ -47,6 +47,9 @@ inline constexpr FilterId kLocalFilterIdChannels = 1003;
 inline constexpr FilterId kLocalFilterIdBots = 1004;
 inline constexpr FilterId kLocalFilterIdUnread = 1005;
 inline constexpr FilterId kLocalFilterIdAdmin = 1006;
+inline constexpr FilterId kLocalFilterIdSupergroups = 1007;
+inline constexpr FilterId kLocalFilterIdBasicGroups = 1008;
+inline constexpr FilterId kLocalFilterIdUnmuted = 1009;
 inline constexpr FilterId kLocalCustomFilterIdBase = 1100;
 
 [[nodiscard]] inline bool IsLocalFilterId(FilterId id) {
@@ -74,6 +77,10 @@ public:
 		ExistingChats = (1 << 12),
 
 		Admin         = (1 << 13),
+		Supergroups   = (1 << 14),
+		BasicGroups   = (1 << 15),
+
+		LocalRulesMask = Admin | Supergroups | BasicGroups,
 	};
 	friend constexpr inline bool is_flag_type(Flag) { return true; };
 	using Flags = base::flags<Flag>;

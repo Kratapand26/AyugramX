@@ -1076,10 +1076,13 @@ void BuildLocalPresetsSection(
 
 		addToggle(LocalFolderPreset::Users, tr::lng_filters_type_contacts(tr::now));
 		addToggle(LocalFolderPreset::Groups, tr::lng_filters_type_groups(tr::now));
+		addToggle(LocalFolderPreset::Supergroups, u"Supergroups"_q);
+		addToggle(LocalFolderPreset::BasicGroups, u"Basic Groups"_q);
 		addToggle(LocalFolderPreset::Channels, tr::lng_filters_type_channels(tr::now));
 		addToggle(LocalFolderPreset::Bots, tr::lng_filters_type_bots(tr::now));
-		addToggle(LocalFolderPreset::Unread, tr::lng_filters_name_unread(tr::now));
 		addToggle(LocalFolderPreset::Admin, u"Admin"_q);
+		addToggle(LocalFolderPreset::Unread, tr::lng_filters_name_unread(tr::now));
+		addToggle(LocalFolderPreset::Unmuted, u"Unmuted"_q);
 
 		return SectionBuilder::WidgetToAdd{};
 	});

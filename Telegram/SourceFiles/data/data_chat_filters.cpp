@@ -16,8 +16,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "data/data_session.h"
 #include "data/data_folder.h"
 #include "data/data_histories.h"
+#include "data/data_changes.h"
 #include "dialogs/dialogs_main_list.h"
-#include "history/history.h"
 #include "history/history_unread_things.h"
 #include "ui/ui_utility.h"
 #include "ui/chat/more_chats_bar.h"
@@ -389,17 +389,21 @@ bool ChatFilter::contains(
 		// group nor a channel); it can only be included explicitly by id.
 		return _always.contains(history);
 	}
+	const auto isChat = history->peer->isChat();
+	const auto isMegagroup = channel && channel->isMegagroup();
 	const auto isAdmin = [&] {
 		const auto peer = history->peer;
 		if (const auto chat = peer->asChat()) {
 			return chat->amCreator() || chat->hasAdminRights();
-		} else if (const auto channel = peer->asChannel()) {
+		} else if (channel) {
 			return channel->amCreator() || channel->hasAdminRights();
 		}
 		return false;
 	};
 	const auto typeMatch = (_flags & flag)
-		|| ((_flags & Flag::Admin) && isAdmin());
+		|| ((_flags & Flag::Admin) && isAdmin())
+		|| ((_flags & Flag::Supergroups) && isMegagroup)
+		|| ((_flags & Flag::BasicGroups) && isChat);
 
 	const auto state = (_flags & (Flag::NoMuted | Flag::NoRead))
 		? history->chatListBadgesState()
@@ -428,6 +432,17 @@ ChatFilters::ChatFilters(not_null<Session*> owner)
 		applyLocalFilters();
 		load();
 	});
+
+	owner->session().changes().peerUpdates(
+		Data::PeerUpdate::Flag::Admins
+		| Data::PeerUpdate::Flag::Rights
+		| Data::PeerUpdate::Flag::ChannelAmIn
+		| Data::PeerUpdate::Flag::Migration
+	) | rpl::on_next([=](const Data::PeerUpdate &update) {
+		if (const auto history = owner->historyLoaded(update.peer)) {
+			refreshHistory(history);
+		}
+	}, _lifetime);
 
 	AyuSettings::getInstance().hideAllChatsFolderChanges()
 	| rpl::on_next([=](bool hide) {
@@ -607,9 +622,9 @@ ChatFilter ChatFilters::createPresetFilter(LocalFolderPreset preset) const {
 		return ChatFilter(
 			kLocalFilterIdUsers,
 			ChatFilterTitle{ tr::lng_filters_type_contacts(tr::now) },
-			QString(),
+			u"👤"_q,
 			std::nullopt,
-			Flag::Contacts | Flag::NonContacts,
+			Flag::Contacts | Flag::NonContacts | Flag::NoArchived,
 			emptyAlways,
 			emptyPinned,
 			emptyNever);
@@ -617,9 +632,29 @@ ChatFilter ChatFilters::createPresetFilter(LocalFolderPreset preset) const {
 		return ChatFilter(
 			kLocalFilterIdGroups,
 			ChatFilterTitle{ tr::lng_filters_type_groups(tr::now) },
-			QString(),
+			u"👥"_q,
 			std::nullopt,
-			Flag::Groups,
+			Flag::Groups | Flag::NoArchived,
+			emptyAlways,
+			emptyPinned,
+			emptyNever);
+	case LocalFolderPreset::Supergroups:
+		return ChatFilter(
+			kLocalFilterIdSupergroups,
+			ChatFilterTitle{ u"Supergroups"_q },
+			u"✴️"_q,
+			std::nullopt,
+			Flag::Supergroups | Flag::NoArchived,
+			emptyAlways,
+			emptyPinned,
+			emptyNever);
+	case LocalFolderPreset::BasicGroups:
+		return ChatFilter(
+			kLocalFilterIdBasicGroups,
+			ChatFilterTitle{ u"Basic Groups"_q },
+			u"🇴"_q,
+			std::nullopt,
+			Flag::BasicGroups | Flag::NoArchived,
 			emptyAlways,
 			emptyPinned,
 			emptyNever);
@@ -627,9 +662,9 @@ ChatFilter ChatFilters::createPresetFilter(LocalFolderPreset preset) const {
 		return ChatFilter(
 			kLocalFilterIdChannels,
 			ChatFilterTitle{ tr::lng_filters_type_channels(tr::now) },
-			QString(),
+			u"📢"_q,
 			std::nullopt,
-			Flag::Channels,
+			Flag::Channels | Flag::NoArchived,
 			emptyAlways,
 			emptyPinned,
 			emptyNever);
@@ -637,19 +672,9 @@ ChatFilter ChatFilters::createPresetFilter(LocalFolderPreset preset) const {
 		return ChatFilter(
 			kLocalFilterIdBots,
 			ChatFilterTitle{ tr::lng_filters_type_bots(tr::now) },
-			QString(),
+			u"🤖"_q,
 			std::nullopt,
-			Flag::Bots,
-			emptyAlways,
-			emptyPinned,
-			emptyNever);
-	case LocalFolderPreset::Unread:
-		return ChatFilter(
-			kLocalFilterIdUnread,
-			ChatFilterTitle{ tr::lng_filters_name_unread(tr::now) },
-			QString(),
-			std::nullopt,
-			Flag::Contacts | Flag::NonContacts | Flag::Groups | Flag::Channels | Flag::Bots | Flag::NoRead,
+			Flag::Bots | Flag::NoArchived,
 			emptyAlways,
 			emptyPinned,
 			emptyNever);
@@ -657,9 +682,29 @@ ChatFilter ChatFilters::createPresetFilter(LocalFolderPreset preset) const {
 		return ChatFilter(
 			kLocalFilterIdAdmin,
 			ChatFilterTitle{ u"Admin"_q },
-			QString(),
+			u"👑"_q,
 			std::nullopt,
-			Flag::Admin,
+			Flag::Admin | Flag::NoArchived,
+			emptyAlways,
+			emptyPinned,
+			emptyNever);
+	case LocalFolderPreset::Unread:
+		return ChatFilter(
+			kLocalFilterIdUnread,
+			ChatFilterTitle{ tr::lng_filters_name_unread(tr::now) },
+			u"💬"_q,
+			std::nullopt,
+			Flag::Contacts | Flag::NonContacts | Flag::Groups | Flag::Channels | Flag::Bots | Flag::NoRead | Flag::NoArchived,
+			emptyAlways,
+			emptyPinned,
+			emptyNever);
+	case LocalFolderPreset::Unmuted:
+		return ChatFilter(
+			kLocalFilterIdUnmuted,
+			ChatFilterTitle{ u"Unmuted"_q },
+			u"🔔"_q,
+			std::nullopt,
+			Flag::Contacts | Flag::NonContacts | Flag::Groups | Flag::Channels | Flag::Bots | Flag::NoMuted | Flag::NoArchived,
 			emptyAlways,
 			emptyPinned,
 			emptyNever);
@@ -676,10 +721,13 @@ void ChatFilters::toggleLocalPreset(LocalFolderPreset preset, bool enabled) {
 		switch (preset) {
 		case LocalFolderPreset::Users: return kLocalFilterIdUsers;
 		case LocalFolderPreset::Groups: return kLocalFilterIdGroups;
+		case LocalFolderPreset::Supergroups: return kLocalFilterIdSupergroups;
+		case LocalFolderPreset::BasicGroups: return kLocalFilterIdBasicGroups;
 		case LocalFolderPreset::Channels: return kLocalFilterIdChannels;
 		case LocalFolderPreset::Bots: return kLocalFilterIdBots;
-		case LocalFolderPreset::Unread: return kLocalFilterIdUnread;
 		case LocalFolderPreset::Admin: return kLocalFilterIdAdmin;
+		case LocalFolderPreset::Unread: return kLocalFilterIdUnread;
+		case LocalFolderPreset::Unmuted: return kLocalFilterIdUnmuted;
 		}
 		return FilterId(0);
 	}();
@@ -690,7 +738,27 @@ void ChatFilters::toggleLocalPreset(LocalFolderPreset preset, bool enabled) {
 	if (enabled) {
 		const auto it = ranges::find(_list, filterId, &ChatFilter::id);
 		if (it == end(_list)) {
-			applyInsert(createPresetFilter(preset), _list.size());
+			const auto &customs = settings.localCustomFolders(userId);
+			const auto cIt = ranges::find(customs, filterId, &LocalCustomFolder::id);
+			if (cIt != end(customs)) {
+				auto always = base::flat_set<not_null<History*>>();
+				for (const auto pId : cIt->always) always.insert(_owner->history(PeerId(pId)));
+				auto pinned = std::vector<not_null<History*>>();
+				for (const auto pId : cIt->pinned) pinned.push_back(_owner->history(PeerId(pId)));
+				auto never = base::flat_set<not_null<History*>>();
+				for (const auto pId : cIt->never) never.insert(_owner->history(PeerId(pId)));
+				applyInsert(ChatFilter(
+					filterId,
+					ChatFilterTitle{ cIt->title },
+					cIt->iconEmoji,
+					cIt->colorIndex ? std::make_optional(uint8(*cIt->colorIndex)) : std::nullopt,
+					ChatFilter::Flags::from_raw(cIt->flags),
+					std::move(always),
+					std::move(pinned),
+					std::move(never)), _list.size());
+			} else {
+				applyInsert(createPresetFilter(preset), _list.size());
+			}
 			_listChanged.fire({});
 		}
 	} else {
@@ -756,10 +824,13 @@ void ChatFilters::deleteLocalFolder(FilterId id) {
 			switch (id) {
 			case kLocalFilterIdUsers: return LocalFolderPreset::Users;
 			case kLocalFilterIdGroups: return LocalFolderPreset::Groups;
+			case kLocalFilterIdSupergroups: return LocalFolderPreset::Supergroups;
+			case kLocalFilterIdBasicGroups: return LocalFolderPreset::BasicGroups;
 			case kLocalFilterIdChannels: return LocalFolderPreset::Channels;
 			case kLocalFilterIdBots: return LocalFolderPreset::Bots;
-			case kLocalFilterIdUnread: return LocalFolderPreset::Unread;
 			case kLocalFilterIdAdmin: return LocalFolderPreset::Admin;
+			case kLocalFilterIdUnread: return LocalFolderPreset::Unread;
+			case kLocalFilterIdUnmuted: return LocalFolderPreset::Unmuted;
 			}
 			return std::nullopt;
 		}();
@@ -825,10 +896,13 @@ void ChatFilters::applyLocalFilters() {
 
 	checkPreset(LocalFolderPreset::Users, kLocalFilterIdUsers);
 	checkPreset(LocalFolderPreset::Groups, kLocalFilterIdGroups);
+	checkPreset(LocalFolderPreset::Supergroups, kLocalFilterIdSupergroups);
+	checkPreset(LocalFolderPreset::BasicGroups, kLocalFilterIdBasicGroups);
 	checkPreset(LocalFolderPreset::Channels, kLocalFilterIdChannels);
 	checkPreset(LocalFolderPreset::Bots, kLocalFilterIdBots);
-	checkPreset(LocalFolderPreset::Unread, kLocalFilterIdUnread);
 	checkPreset(LocalFolderPreset::Admin, kLocalFilterIdAdmin);
+	checkPreset(LocalFolderPreset::Unread, kLocalFilterIdUnread);
+	checkPreset(LocalFolderPreset::Unmuted, kLocalFilterIdUnmuted);
 
 	for (const auto &cf : settings.localCustomFolders(userId)) {
 		if (cf.id < kLocalCustomFilterIdBase) {
@@ -1128,7 +1202,7 @@ bool ChatFilters::applyChange(ChatFilter &filter, ChatFilter &&updated) {
 
 	const auto id = filter.id();
 	const auto exceptionsChanged = filter.always() != updated.always();
-	const auto rulesMask = Flag() | Flag::RulesMask;
+	const auto rulesMask = Flag::RulesMask | Flag::LocalRulesMask;
 	const auto rulesChanged = exceptionsChanged
 		|| ((filter.flags() & rulesMask) != (updated.flags() & rulesMask))
 		|| (filter.never() != updated.never());

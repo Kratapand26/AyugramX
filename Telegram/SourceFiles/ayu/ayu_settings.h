@@ -25,6 +25,9 @@ enum class LocalFolderPreset {
 	Bots = 4,
 	Unread = 5,
 	Admin = 6,
+	Supergroups = 7,
+	BasicGroups = 8,
+	Unmuted = 9,
 };
 
 struct LocalCustomFolder {

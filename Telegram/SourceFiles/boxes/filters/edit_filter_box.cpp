@@ -468,11 +468,18 @@ void CreateIconSelector(
 			? tr::lng_filters_name_people(tr::now)
 			: tr::lng_filters_include_contacts(tr::now);
 	case Icon::Groups:
+		if (filter.flags() & Data::ChatFilter::Flag::Supergroups) {
+			return u"Supergroups"_q;
+		} else if (filter.flags() & Data::ChatFilter::Flag::BasicGroups) {
+			return u"Basic Groups"_q;
+		}
 		return tr::lng_filters_include_groups(tr::now);
 	case Icon::Channels:
 		return tr::lng_filters_include_channels(tr::now);
 	case Icon::Bots:
 		return tr::lng_filters_include_bots(tr::now);
+	case Icon::Crown:
+		return u"Admin"_q;
 	case Icon::Unread:
 		return tr::lng_filters_name_unread(tr::now);
 	case Icon::Unmuted:
@@ -981,7 +988,7 @@ void EditFilterBox(
 			name->showError();
 			box->scrollToY(0);
 			return {};
-		} else if (!(rules.flags() & kTypes) && rules.always().empty()) {
+		} else if (!(rules.flags() & (kTypes | Flag::LocalRulesMask)) && rules.always().empty()) {
 			window->window().showToast(tr::lng_filters_empty(tr::now));
 			return {};
 		} else if ((rules.flags() == (kTypes | Flag::NoArchived))

@@ -304,6 +304,12 @@ FilterIcon ComputeDefaultFilterIcon(const Data::ChatFilter &filter) {
 	using Icon = FilterIcon;
 	using Flag = Data::ChatFilter::Flag;
 
+	if (filter.flags() & Flag::Admin) {
+		return Icon::Crown;
+	} else if (filter.flags() & (Flag::Supergroups | Flag::BasicGroups)) {
+		return Icon::Groups;
+	}
+
 	const auto all = Flag::Contacts
 		| Flag::NonContacts
 		| Flag::Groups
@@ -329,8 +335,6 @@ FilterIcon ComputeDefaultFilterIcon(const Data::ChatFilter &filter) {
 		return Icon::Unread;
 	} else if ((filter.flags() & removed) == Flag::NoMuted) {
 		return Icon::Unmuted;
-	} else if (filter.flags() & Flag::Admin) {
-		return Icon::Setup;
 	}
 	return Icon::Custom;
 }
