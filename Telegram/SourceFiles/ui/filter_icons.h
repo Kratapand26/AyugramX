@@ -59,6 +59,23 @@ enum class FilterIcon : uchar {
 	Setup,
 	// Poo,
 
+	Settings,
+	Lock,
+	Folders,
+	Chat,
+	Stickers,
+	Globe,
+	Info,
+	Code,
+	Tag,
+	Video,
+	Fire,
+	Download,
+	Headphones,
+	Pin,
+	Rocket,
+	Coffee,
+
 	Edit,
 };
 

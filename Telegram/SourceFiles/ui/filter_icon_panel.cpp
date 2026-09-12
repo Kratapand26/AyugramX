@@ -64,6 +64,22 @@ constexpr auto kIcons = std::array{
 	FilterIcon::Custom,
 	FilterIcon::Setup,
 	// FilterIcon::Poo,
+	FilterIcon::Settings,
+	FilterIcon::Lock,
+	FilterIcon::Folders,
+	FilterIcon::Chat,
+	FilterIcon::Stickers,
+	FilterIcon::Globe,
+	FilterIcon::Info,
+	FilterIcon::Code,
+	FilterIcon::Tag,
+	FilterIcon::Video,
+	FilterIcon::Fire,
+	FilterIcon::Download,
+	FilterIcon::Headphones,
+	FilterIcon::Pin,
+	FilterIcon::Rocket,
+	FilterIcon::Coffee,
 };
 
 } // namespace

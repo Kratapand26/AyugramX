@@ -266,6 +266,118 @@ const auto kIcons = std::vector<FilterIcons>{
 	//	"\xF0\x9F\x92\xA9"_cs.utf16()
 	//},
 	{
+		&st::foldersSettings,
+		&st::foldersSettingsActive,
+		&st::foldersTabsSettings,
+		&st::foldersUserpicSettings,
+		"\xE2\x9A\x99\xEF\xB8\x8F"_cs.utf16()
+	},
+	{
+		&st::foldersLock,
+		&st::foldersLockActive,
+		&st::foldersTabsLock,
+		&st::foldersUserpicLock,
+		"\xF0\x9F\x94\x92"_cs.utf16()
+	},
+	{
+		&st::foldersFolders,
+		&st::foldersFoldersActive,
+		&st::foldersTabsFolders,
+		&st::foldersUserpicFolders,
+		"\xF0\x9F\x97\x82"_cs.utf16()
+	},
+	{
+		&st::foldersChat,
+		&st::foldersChatActive,
+		&st::foldersTabsChat,
+		&st::foldersUserpicChat,
+		"\xF0\x9F\x97\xA8"_cs.utf16()
+	},
+	{
+		&st::foldersStickers,
+		&st::foldersStickersActive,
+		&st::foldersTabsStickers,
+		&st::foldersUserpicStickers,
+		"\xF0\x9F\x8C\x9F"_cs.utf16()
+	},
+	{
+		&st::foldersGlobe,
+		&st::foldersGlobeActive,
+		&st::foldersTabsGlobe,
+		&st::foldersUserpicGlobe,
+		"\xF0\x9F\x8C\x90"_cs.utf16()
+	},
+	{
+		&st::foldersInfo,
+		&st::foldersInfoActive,
+		&st::foldersTabsInfo,
+		&st::foldersUserpicInfo,
+		"\xE2\x84\xB9\xEF\xB8\x8F"_cs.utf16()
+	},
+	{
+		&st::foldersCode,
+		&st::foldersCodeActive,
+		&st::foldersTabsCode,
+		&st::foldersUserpicCode,
+		"\xF0\x9F\x92\xBB"_cs.utf16()
+	},
+	{
+		&st::foldersTag,
+		&st::foldersTagActive,
+		&st::foldersTabsTag,
+		&st::foldersUserpicTag,
+		"\xF0\x9F\x8F\xB7"_cs.utf16()
+	},
+	{
+		&st::foldersVideo,
+		&st::foldersVideoActive,
+		&st::foldersTabsVideo,
+		&st::foldersUserpicVideo,
+		"\xF0\x9F\x8E\xAC"_cs.utf16()
+	},
+	{
+		&st::foldersFire,
+		&st::foldersFireActive,
+		&st::foldersTabsFire,
+		&st::foldersUserpicFire,
+		"\xF0\x9F\x94\xA5"_cs.utf16()
+	},
+	{
+		&st::foldersDownload,
+		&st::foldersDownloadActive,
+		&st::foldersTabsDownload,
+		&st::foldersUserpicDownload,
+		"\xF0\x9F\x93\xA5"_cs.utf16()
+	},
+	{
+		&st::foldersHeadphones,
+		&st::foldersHeadphonesActive,
+		&st::foldersTabsHeadphones,
+		&st::foldersUserpicHeadphones,
+		"\xF0\x9F\x8E\xA7"_cs.utf16()
+	},
+	{
+		&st::foldersPin,
+		&st::foldersPinActive,
+		&st::foldersTabsPin,
+		&st::foldersUserpicPin,
+		"\xF0\x9F\x93\x8C"_cs.utf16()
+	},
+	{
+		&st::foldersRocket,
+		&st::foldersRocketActive,
+		&st::foldersTabsRocket,
+		&st::foldersUserpicRocket,
+		"\xF0\x9F\x9A\x80"_cs.utf16()
+	},
+	{
+		&st::foldersCoffee,
+		&st::foldersCoffeeActive,
+		&st::foldersTabsCoffee,
+		&st::foldersUserpicCoffee,
+		"\xE2\x98\x95\xEF\xB8\x8F"_cs.utf16()
+	},
+	{
 		&st::filtersEdit,
 		&st::filtersEdit,
 		&st::foldersTabsEdit,
@@ -285,14 +397,13 @@ const FilterIcons &LookupFilterIcon(FilterIcon icon) {
 std::optional<FilterIcon> LookupFilterIconByEmoji(const QString &emoji) {
 	static const auto kMap = [] {
 		auto result = base::flat_map<EmojiPtr, FilterIcon>();
-		auto index = 0;
-		for (const auto &entry : kIcons) {
-			if (entry.emoji.isEmpty()) {
+		for (auto i = 0; i != kIcons.size(); ++i) {
+			if (kIcons[i].emoji.isEmpty()) {
 				continue;
 			}
-			const auto emoji = Ui::Emoji::Find(entry.emoji);
+			const auto emoji = Ui::Emoji::Find(kIcons[i].emoji);
 			Assert(emoji != nullptr);
-			result.emplace(emoji, static_cast<FilterIcon>(index++));
+			result.emplace(emoji, static_cast<FilterIcon>(i));
 		}
 		return result;
 	}();
