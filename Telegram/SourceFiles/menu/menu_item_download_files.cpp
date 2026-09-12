@@ -38,6 +38,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "styles/style_widgets.h"
 
 #include <QRegularExpression>
+#include <QFileInfo>
 
 namespace Menu {
 namespace {
@@ -219,10 +220,34 @@ void AddAction(
 		}
 	};
 	const auto saveDocuments = [=](const QString &folderPath, int startNum) {
+		const auto targetDir = QDir(folderPath);
+		const auto sameDirectory = [](const QString &filePath, const QDir &dir) {
+			if (filePath.isEmpty()) {
+				return false;
+			}
+			const auto fileDir = QDir::cleanPath(QFileInfo(filePath).absolutePath());
+			const auto targetPath = QDir::cleanPath(dir.absolutePath());
+#ifdef Q_OS_WIN
+			return fileDir.compare(targetPath, Qt::CaseInsensitive) == 0;
+#else
+			return fileDir == targetPath;
+#endif
+		};
+
 		int seqNum = startNum;
 		crl::time delayMs = 0;
 		for (const auto &[document, origin] : documents) {
 			if (!folderPath.isEmpty()) {
+				if (document->loading()) {
+					if (sameDirectory(document->loadingFilePath(), targetDir)) {
+						continue;
+					}
+				}
+
+				if (sameDirectory(document->filepath(true), targetDir)) {
+					continue;
+				}
+
 				const auto name = numberedName(seqNum++, document->filename(), document->mimeString());
 				const auto path = folderPath + name;
 				const auto doc = document;
@@ -233,7 +258,13 @@ void AddAction(
 				// can't queue them all fast enough.
 				base::call_delayed(delayMs, weak, [=] {
 					if (doc->loading()) {
+						if (sameDirectory(doc->loadingFilePath(), targetDir)) {
+							return;
+						}
 						doc->cancel();
+					}
+					if (sameDirectory(doc->filepath(true), targetDir)) {
+						return;
 					}
 					doc->save(orig, path);
 					if (doc->loading() && !doc->loadingFilePath().isEmpty()) {
