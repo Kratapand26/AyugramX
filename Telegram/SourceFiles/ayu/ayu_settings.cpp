@@ -1099,6 +1099,26 @@ void AyuSettings::setCustomFolderColor(uint64 userId, int filterId, std::optiona
 	save();
 }
 
+std::optional<QString> AyuSettings::customFolderIcon(uint64 userId, int filterId) const {
+	const auto acctIt = _localFolderTags.find(userId);
+	if (acctIt == _localFolderTags.end()) return std::nullopt;
+	const auto iconIt = acctIt->second.icons.find(filterId);
+	if (iconIt == acctIt->second.icons.end()) return std::nullopt;
+	return iconIt->second;
+}
+
+void AyuSettings::setCustomFolderIcon(uint64 userId, int filterId, std::optional<QString> iconEmoji) {
+	if (iconEmoji) {
+		_localFolderTags[userId].icons[filterId] = *iconEmoji;
+	} else {
+		auto acctIt = _localFolderTags.find(userId);
+		if (acctIt != _localFolderTags.end()) {
+			acctIt->second.icons.erase(filterId);
+		}
+	}
+	save();
+}
+
 bool AyuSettings::localFolderPresetEnabled(uint64 userId, LocalFolderPreset preset) const {
 	const auto it = _localFolders.find(userId);
 	return (it != _localFolders.end())
@@ -1269,9 +1289,14 @@ void to_json(nlohmann::json &j, const AyuSettings &s) {
 		for (const auto &[filterId, colorIdx] : settings.colors) {
 			colors[std::to_string(filterId)] = colorIdx;
 		}
+		auto icons = nlohmann::json::object();
+		for (const auto &[filterId, iconEmoji] : settings.icons) {
+			icons[std::to_string(filterId)] = iconEmoji.toStdString();
+		}
 		folderTags[std::to_string(userId)] = nlohmann::json{
 			{"enabled", settings.enabled},
-			{"colors", colors}
+			{"colors", colors},
+			{"icons", icons}
 		};
 	}
 	j["localFolderTags"] = folderTags;
@@ -1430,6 +1455,13 @@ void from_json(const nlohmann::json &j, AyuSettings &s) {
 			if (value.contains("colors") && value["colors"].is_object()) {
 				for (auto &[fKey, fVal] : value["colors"].items()) {
 					tagSettings.colors[std::stoi(fKey)] = fVal.get<int>();
+				}
+			}
+			if (value.contains("icons") && value["icons"].is_object()) {
+				for (auto &[fKey, fVal] : value["icons"].items()) {
+					if (fVal.is_string()) {
+						tagSettings.icons[std::stoi(fKey)] = QString::fromStdString(fVal.get<std::string>());
+					}
 				}
 			}
 			s._localFolderTags[std::stoull(key)] = std::move(tagSettings);

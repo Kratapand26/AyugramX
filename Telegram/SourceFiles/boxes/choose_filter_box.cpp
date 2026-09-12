@@ -8,6 +8,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "boxes/choose_filter_box.h"
 
 #include "apiwrap.h"
+#include "ayu/ayu_settings.h"
 #include "base/qt/qt_key_modifiers.h"
 #include "boxes/filters/edit_filter_box.h"
 #include "boxes/premium_limits_box.h"
@@ -401,9 +402,17 @@ void FillChooseFilterMenu(
 			auto filter =
 				Data::ChatFilter({}, {}, {}, {}, {}, { history }, {}, {});
 			const auto send = [=](const Data::ChatFilter &filter) {
+				const auto nextId = chooseNextId();
+				if (!filter.iconEmoji().isEmpty()) {
+					auto &settings = AyuSettings::getInstance();
+					settings.setCustomFolderIcon(
+						session->userId().bare,
+						nextId,
+						filter.iconEmoji());
+				}
 				session->api().request(MTPmessages_UpdateDialogFilter(
 					MTP_flags(MTPmessages_UpdateDialogFilter::Flag::f_filter),
-					MTP_int(chooseNextId()),
+					MTP_int(nextId),
 					filter.tl()
 				)).done([=] {
 					session->data().chatsFilters().reload();

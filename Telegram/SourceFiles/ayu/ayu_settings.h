@@ -385,6 +385,8 @@ public:
 	void setLocalFolderTagsEnabled(uint64 userId, bool val);
 	[[nodiscard]] std::optional<int> customFolderColor(uint64 userId, int filterId) const;
 	void setCustomFolderColor(uint64 userId, int filterId, std::optional<int> colorIndex);
+	[[nodiscard]] std::optional<QString> customFolderIcon(uint64 userId, int filterId) const;
+	void setCustomFolderIcon(uint64 userId, int filterId, std::optional<QString> iconEmoji);
 
 	// AyuGram: Local Folders
 	[[nodiscard]] bool localFolderPresetEnabled(uint64 userId, LocalFolderPreset preset) const;
@@ -763,6 +765,7 @@ private:
 	struct LocalFolderTagSettings {
 		bool enabled = false;
 		std::map<int, int> colors; // filterId -> colorIndex
+		std::map<int, QString> icons; // filterId -> iconEmoji
 	};
 	std::map<uint64, LocalFolderTagSettings> _localFolderTags;
 

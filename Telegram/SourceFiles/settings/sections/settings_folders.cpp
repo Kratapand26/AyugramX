@@ -701,9 +701,9 @@ not_null<Ui::VerticalLayout*> SetupFoldersList(
 				}
 			}
 
-			// AyuGram: Save color locally for non-premium users
+			// AyuGram: Save color locally for non-premium users and shared folders
 			// so it persists after server strips it on next refresh.
-			if (!removed && !session->premium()) {
+			if (!removed && (!session->premium() || row.filter.chatlist())) {
 				auto &ayuSettings = AyuSettings::getInstance();
 				ayuSettings.setCustomFolderColor(
 					session->userId().bare,
@@ -711,6 +711,22 @@ not_null<Ui::VerticalLayout*> SetupFoldersList(
 					row.filter.colorIndex()
 						? std::make_optional(static_cast<int>(*row.filter.colorIndex()))
 						: std::nullopt);
+			}
+
+			// AyuGram: Save custom icon locally so it persists
+			// when server strips it or rejects updates for shared folders.
+			if (removed) {
+				auto &ayuSettings = AyuSettings::getInstance();
+				ayuSettings.setCustomFolderColor(session->userId().bare, id, std::nullopt);
+				ayuSettings.setCustomFolderIcon(session->userId().bare, id, std::nullopt);
+			} else {
+				auto &ayuSettings = AyuSettings::getInstance();
+				ayuSettings.setCustomFolderIcon(
+					session->userId().bare,
+					row.filter.id(),
+					row.filter.iconEmoji().isEmpty()
+						? std::nullopt
+						: std::make_optional(row.filter.iconEmoji()));
 			}
 
 			const auto tl = removed

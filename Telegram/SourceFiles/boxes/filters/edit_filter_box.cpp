@@ -1159,9 +1159,9 @@ void EditExistingFilter(
 			return;
 		}
 
-		// AyuGram: Save color locally for non-premium users
+		// AyuGram: Save color locally for non-premium users and shared folders
 		// so it persists after server strips it.
-		if (!session->premium()) {
+		if (!session->premium() || result.chatlist()) {
 			auto &settings = AyuSettings::getInstance();
 			settings.setCustomFolderColor(
 				session->userId().bare,
@@ -1169,6 +1169,18 @@ void EditExistingFilter(
 				result.colorIndex()
 					? std::make_optional(static_cast<int>(*result.colorIndex()))
 					: std::nullopt);
+		}
+
+		// AyuGram: Save custom icon locally so it persists
+		// when server strips it (non-premium) or locks it (shared folders / custom icons).
+		{
+			auto &settings = AyuSettings::getInstance();
+			settings.setCustomFolderIcon(
+				session->userId().bare,
+				id,
+				result.iconEmoji().isEmpty()
+					? std::nullopt
+					: std::make_optional(result.iconEmoji()));
 		}
 
 		const auto tl = result.tl();

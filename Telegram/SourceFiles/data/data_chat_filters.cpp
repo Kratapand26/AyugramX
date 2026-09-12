@@ -184,17 +184,25 @@ ChatFilter ChatFilter::FromTL(
 			{});
 	});
 
-	// AyuGram: Apply local folder color override for non-premium users.
-	// When the server strips color for non-premium accounts,
-	// restore it from locally persisted settings.
-	if (!result.colorIndex() && !(owner->session().user()->flags() & UserDataFlag::Premium)) {
+	// AyuGram: Apply local folder color and icon overrides.
+	// When the server strips color/emoticon for non-premium accounts,
+	// or for shared folders (chatlists) where server rejects modifications,
+	// restore them from locally persisted settings.
+	{
 		const auto &settings = AyuSettings::getInstance();
-		const auto localColor = settings.customFolderColor(
-			owner->session().userId().bare,
-			result.id());
-		if (localColor) {
-			result = result.withColorIndex(
-				std::make_optional(static_cast<uint8>(*localColor)));
+		const auto userId = owner->session().userId().bare;
+
+		if (!result.colorIndex() || result.chatlist()) {
+			const auto localColor = settings.customFolderColor(userId, result.id());
+			if (localColor) {
+				result = result.withColorIndex(
+					std::make_optional(static_cast<uint8>(*localColor)));
+			}
+		}
+
+		const auto localIcon = settings.customFolderIcon(userId, result.id());
+		if (localIcon) {
+			result = result.withIconEmoji(*localIcon);
 		}
 	}
 
@@ -215,6 +223,12 @@ ChatFilter ChatFilter::withTitle(ChatFilterTitle title) const {
 	} else {
 		result._flags &= ~Flag::StaticTitle;
 	}
+	return result;
+}
+
+ChatFilter ChatFilter::withIconEmoji(QString iconEmoji) const {
+	auto result = *this;
+	result._iconEmoji = std::move(iconEmoji);
 	return result;
 }
 
@@ -1192,6 +1206,15 @@ void ChatFilters::applyRemove(int position) {
 	const auto i = begin(_list) + position;
 	auto filter = std::move(*i);
 	_list.erase(i);
+
+	// AyuGram: Clean up local overrides for this filter
+	{
+		auto &settings = AyuSettings::getInstance();
+		const auto userId = _owner->session().userId().bare;
+		settings.setCustomFolderColor(userId, filter.id(), std::nullopt);
+		settings.setCustomFolderIcon(userId, filter.id(), std::nullopt);
+	}
+
 	applyChange(filter, ChatFilter(filter.id(), {}, {}, {}, {}, {}, {}, {}));
 }
 

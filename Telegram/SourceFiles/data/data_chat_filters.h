@@ -98,6 +98,7 @@ public:
 
 	[[nodiscard]] ChatFilter withId(FilterId id) const;
 	[[nodiscard]] ChatFilter withTitle(ChatFilterTitle title) const;
+	[[nodiscard]] ChatFilter withIconEmoji(QString iconEmoji) const;
 	[[nodiscard]] ChatFilter withColorIndex(std::optional<uint8>) const;
 	[[nodiscard]] ChatFilter withChatlist(
 		bool chatlist,
