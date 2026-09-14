@@ -280,18 +280,18 @@ const auto kIcons = std::vector<FilterIcons>{
 		"\xF0\x9F\x94\x92"_cs.utf16()
 	},
 	{
-		&st::foldersFolders,
-		&st::foldersFoldersActive,
-		&st::foldersTabsFolders,
-		&st::foldersUserpicFolders,
-		"\xF0\x9F\x97\x82"_cs.utf16()
+		&st::foldersCart,
+		&st::foldersCartActive,
+		&st::foldersTabsCart,
+		&st::foldersUserpicCart,
+		"\xF0\x9F\x9B\x92"_cs.utf16()
 	},
 	{
-		&st::foldersChat,
-		&st::foldersChatActive,
-		&st::foldersTabsChat,
-		&st::foldersUserpicChat,
-		"\xF0\x9F\x97\xA8"_cs.utf16()
+		&st::foldersShield,
+		&st::foldersShieldActive,
+		&st::foldersTabsShield,
+		&st::foldersUserpicShield,
+		"\xF0\x9F\x9B\xA1"_cs.utf16()
 	},
 	{
 		&st::foldersStickers,
@@ -308,11 +308,11 @@ const auto kIcons = std::vector<FilterIcons>{
 		"\xF0\x9F\x8C\x90"_cs.utf16()
 	},
 	{
-		&st::foldersInfo,
-		&st::foldersInfoActive,
-		&st::foldersTabsInfo,
-		&st::foldersUserpicInfo,
-		"\xE2\x84\xB9\xEF\xB8\x8F"_cs.utf16()
+		&st::foldersCloud,
+		&st::foldersCloudActive,
+		&st::foldersTabsCloud,
+		&st::foldersUserpicCloud,
+		"\xE2\x98\x81\xEF\xB8\x8F"_cs.utf16()
 	},
 	{
 		&st::foldersCode,
