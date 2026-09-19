@@ -47,6 +47,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 // AyuGram includes
 #include "ayu/utils/telegram_helpers.h"
+#include "ayu/ayu_settings.h"
 
 
 namespace {
@@ -526,6 +527,7 @@ FileLoadTask::FileLoadTask(Args &&args)
 , _spoiler(args.spoiler)
 , _forceFile(args.forceFile)
 , _sendLargePhotos(args.sendLargePhotos)
+, _sendAsSticker(args.sendAsSticker)
 , _animationJob(std::move(args.animationJob)) {
 	Expects(_to.options.scheduled
 		|| _to.options.shortcutId
@@ -1089,10 +1091,14 @@ void FileLoadTask::process(ProcessArgs &&args) {
 		attributes.push_back(MTP_documentAttributeImageSize(MTP_int(w), MTP_int(h)));
 
 		if (ValidateThumbDimensions(w, h)) {
+			const auto allowWebpSticker = _sendAsSticker
+				|| (!_forceFile
+					&& !AyuSettings::getInstance().sendWebpAsDocument());
 			isSticker = Core::IsMimeSticker(filemime)
 				&& (filesize < Storage::kMaxStickerBytesSize)
 				&& (Core::IsMimeStickerAnimated(filemime)
 					|| (_type == SendMediaType::File
+						&& allowWebpSticker
 						&& GoodStickerDimensions(w, h)));
 			if (isSticker) {
 				attributes.push_back(MTP_documentAttributeSticker(

@@ -22,6 +22,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "styles/style_chat_style.h"
 #include "styles/style_chat_helpers.h"
 #include "styles/style_media_player.h"
+#include "ayu/ayu_settings.h"
 
 #include <QFileInfo>
 
@@ -401,7 +402,9 @@ bool PreparedList::canAddCaption(bool compress) const {
 	const auto isSticker = last.path.endsWith(u".tgs"_q, Qt::CaseInsensitive)
 		|| (!compress
 			&& last.information
-			&& Core::IsMimeSticker(last.information->filemime));
+			&& (AyuSettings::getInstance().sendWebpAsDocument()
+				? Core::IsMimeStickerAnimated(last.information->filemime)
+				: Core::IsMimeSticker(last.information->filemime)));
 	return !isSticker;
 }
 

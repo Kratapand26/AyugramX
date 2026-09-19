@@ -111,6 +111,7 @@ struct PreparedFile {
 	crl::time ttlSeconds = 0;
 	bool spoiler = false;
 	bool sendLargePhotos = false;
+	bool sendAsSticker = false;
 	std::shared_ptr<Media::Encode::Job> animationJob;
 };
 

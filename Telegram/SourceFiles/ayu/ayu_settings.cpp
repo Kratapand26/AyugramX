@@ -604,6 +604,12 @@ void AyuSettings::setShowOnlyAddedEmojisAndStickers(bool val) {
 	save();
 }
 
+void AyuSettings::setSendWebpAsDocument(bool val) {
+	if (_sendWebpAsDocument.current() == val) return;
+	_sendWebpAsDocument = val;
+	save();
+}
+
 void AyuSettings::setCollapseSimilarChannels(bool val) {
 	if (_collapseSimilarChannels.current() == val) return;
 	_collapseSimilarChannels = val;
@@ -1205,6 +1211,7 @@ void to_json(nlohmann::json &j, const AyuSettings &s) {
 		{"disableCustomBackgrounds", s._disableCustomBackgrounds.current()},
 		{"hidePremiumStatuses", s._hidePremiumStatuses.current()},
 		{"showOnlyAddedEmojisAndStickers", s._showOnlyAddedEmojisAndStickers.current()},
+		{"sendWebpAsDocument", s._sendWebpAsDocument.current()},
 		{"collapseSimilarChannels", s._collapseSimilarChannels.current()},
 		{"hideSimilarChannels", s._hideSimilarChannels.current()},
 		{"messageBubbleRadius", s._messageBubbleRadius.current()},
@@ -1367,6 +1374,7 @@ void from_json(const nlohmann::json &j, AyuSettings &s) {
 	s._disableCustomBackgrounds = j.value("disableCustomBackgrounds", defaults._disableCustomBackgrounds.current());
 	s._hidePremiumStatuses = j.value("hidePremiumStatuses", defaults._hidePremiumStatuses.current());
 	s._showOnlyAddedEmojisAndStickers = j.value("showOnlyAddedEmojisAndStickers", defaults._showOnlyAddedEmojisAndStickers.current());
+	s._sendWebpAsDocument = j.value("sendWebpAsDocument", defaults._sendWebpAsDocument.current());
 	s._collapseSimilarChannels = j.value("collapseSimilarChannels", defaults._collapseSimilarChannels.current());
 	s._hideSimilarChannels = j.value("hideSimilarChannels", defaults._hideSimilarChannels.current());
 	s._messageBubbleRadius = j.value("messageBubbleRadius", defaults._messageBubbleRadius.current());

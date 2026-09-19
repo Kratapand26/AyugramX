@@ -72,6 +72,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "window/window_controller.h"
 #include "core/application.h"
 #include "core/core_settings.h"
+#include "ayu/ayu_settings.h"
 #include "styles/style_boxes.h"
 #include "styles/style_chat.h"
 #include "styles/style_chat_helpers.h"
@@ -375,7 +376,7 @@ void EditPriceBox(
 	return way.sendImagesAsPhotos()
 		? (file.type == Ui::PreparedFile::Type::Photo
 			|| file.type == Ui::PreparedFile::Type::Video)
-		: file.isSticker();
+		: (file.isSticker() && !AyuSettings::getInstance().sendWebpAsDocument());
 }
 
 } // namespace
@@ -1293,6 +1294,9 @@ void SendFilesBox::addMenuButton() {
 					addFiles(Storage::PrepareMediaFromImage(std::move(targetImage),
 															std::move(targetArray),
 															st::sendMediaPreviewSize));
+					if (!_list.files.empty()) {
+						_list.files.front().sendAsSticker = true;
+					}
 					_list.overrideSendImagesAsPhotos = false;
 					initSendWay();
 
@@ -2702,7 +2706,7 @@ void SendFilesBox::send(
 				auto &captioned = (group.type == Ui::AlbumType::PhotoVideo)
 					? files.front()
 					: files.back();
-				if (!captioned.isSticker() || way.sendImagesAsPhotos()) {
+				if (!captioned.isSticker() || way.sendImagesAsPhotos() || AyuSettings::getInstance().sendWebpAsDocument()) {
 					captioned.caption = std::move(caption);
 				}
 			}

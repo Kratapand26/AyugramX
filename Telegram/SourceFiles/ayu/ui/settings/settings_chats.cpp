@@ -45,6 +45,13 @@ void BuildStickersAndEmoji(SectionBuilder &builder, AyuSectionBuilder &ayu) {
 	});
 
 	ayu.addSettingToggle({
+		.id = u"ayu/sendWebpAsDocument"_q,
+		.title = tr::ayu_SendWebpAsDocument(),
+		.getter = &AyuSettings::sendWebpAsDocument,
+		.setter = &AyuSettings::setSendWebpAsDocument,
+	});
+
+	ayu.addSettingToggle({
 		.id = u"ayu/unlimitedRecentStickers"_q,
 		.altIds = { u"ayu/recentStickersCount"_q },
 		.title = tr::ayu_SettingsUnlimitedRecentStickers(),

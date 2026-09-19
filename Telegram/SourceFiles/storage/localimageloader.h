@@ -258,6 +258,7 @@ public:
 		std::shared_ptr<SendingAlbum> album;
 		bool forceFile = false;
 		bool sendLargePhotos = false;
+		bool sendAsSticker = false;
 		std::shared_ptr<Media::Encode::Job> animationJob;
 		uint64 idOverride = 0;
 		QString displayName;
@@ -331,6 +332,7 @@ private:
 	bool _spoiler = false;
 	bool _forceFile = false;
 	bool _sendLargePhotos = false;
+	bool _sendAsSticker = false;
 	std::shared_ptr<Media::Encode::Job> _animationJob;
 
 	std::shared_ptr<FilePrepareResult> _result;

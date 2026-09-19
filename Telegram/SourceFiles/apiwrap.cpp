@@ -4280,8 +4280,7 @@ void ApiWrap::editMedia(
 		to.replyTo.monoforumPeerId = existing->sublistPeerId();
 		to.replaceMediaOf = MsgId();
 	}
-	const auto forceFile = (type == SendMediaType::File)
-		&& (file.type == Ui::PreparedFile::Type::Video);
+	const auto forceFile = (type == SendMediaType::File);
 	_fileLoader->addTask(std::make_unique<FileLoadTask>(FileLoadTask::Args{
 		.session = &session(),
 		.filepath = file.path,
@@ -4311,6 +4310,7 @@ void ApiWrap::editMedia(
 		.album = nullptr,
 		.forceFile = forceFile,
 		.sendLargePhotos = file.sendLargePhotos,
+		.sendAsSticker = file.sendAsSticker,
 		.idOverride = 0,
 		.displayName = file.displayName,
 	}));
@@ -4349,8 +4349,7 @@ void ApiWrap::sendFiles(
 				&& type != SendMediaType::File)
 			? SendMediaType::Photo
 			: SendMediaType::File;
-		const auto forceFile = (type == SendMediaType::File)
-			&& (file.type == Ui::PreparedFile::Type::Video);
+		const auto forceFile = (type == SendMediaType::File);
 		auto fileTo = to;
 		if (file.ttlSeconds && !fileTo.options.scheduled) {
 			fileTo.options.ttlSeconds = file.ttlSeconds;
@@ -4384,6 +4383,7 @@ void ApiWrap::sendFiles(
 			.album = album,
 			.forceFile = forceFile,
 			.sendLargePhotos = file.sendLargePhotos,
+			.sendAsSticker = file.sendAsSticker,
 			.animationJob = file.animationJob,
 			.idOverride = 0,
 			.displayName = file.displayName,
@@ -4417,7 +4417,7 @@ void ApiWrap::sendFile(
 		.caption = caption,
 		.spoiler = spoiler,
 		.album = nullptr,
-		.forceFile = false,
+		.forceFile = (type == SendMediaType::File),
 		.idOverride = 0
 	}));
 }
