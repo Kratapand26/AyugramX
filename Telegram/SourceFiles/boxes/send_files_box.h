@@ -278,6 +278,7 @@ private:
 
 	void enqueueNextPrepare();
 	void addPreparedAsyncFile(Ui::PreparedFile &&file);
+	void fastTrackRemainingPrepare();
 
 	void checkCharsLimitation();
 	void refreshMessagesCount();

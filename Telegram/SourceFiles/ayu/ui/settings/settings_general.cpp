@@ -206,6 +206,13 @@ void BuildQoLToggles(SectionBuilder &builder, AyuSectionBuilder &ayu) {
 		.setter = &AyuSettings::setDisableNotificationsDelay,
 	});
 
+	ayu.addSettingToggle({
+		.id = u"ayu/boostUploadSpeed"_q,
+		.title = tr::ayu_BoostUploadSpeed(),
+		.getter = &AyuSettings::boostUploadSpeed,
+		.setter = &AyuSettings::setBoostUploadSpeed,
+	});
+
 	ayu.addSectionDivider();
 
 	const auto zalgoButton = builder.addButton({

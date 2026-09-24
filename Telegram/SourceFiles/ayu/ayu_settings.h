@@ -380,6 +380,7 @@ public:
 	[[nodiscard]] int avatarCorners() const { return _avatarCorners.current(); }
 	[[nodiscard]] bool singleCornerRadius() const { return _singleCornerRadius.current(); }
 	[[nodiscard]] bool streamerMode() const { return _streamerMode.current(); }
+	[[nodiscard]] bool boostUploadSpeed() const { return _boostUploadSpeed.current(); }
 
 	// AyuGram: Local folder tags for non-premium users
 	[[nodiscard]] bool localFolderTagsEnabled(uint64 userId) const;
@@ -486,6 +487,7 @@ public:
 	void setSingleCornerRadius(bool val);
 	void setStreamerMode(bool val);
 	void setSendWebpAsDocument(bool val);
+	void setBoostUploadSpeed(bool val);
 
 	[[nodiscard]] rpl::producer<bool> useGlobalGhostModeValue() const { return _useGlobalGhostMode.value(); }
 	[[nodiscard]] rpl::producer<bool> useGlobalGhostModeChanges() const { return _useGlobalGhostMode.changes(); }
@@ -663,6 +665,8 @@ public:
 	[[nodiscard]] rpl::producer<bool> singleCornerRadiusChanges() const { return _singleCornerRadius.changes(); }
 	[[nodiscard]] rpl::producer<bool> streamerModeValue() const { return _streamerMode.value(); }
 	[[nodiscard]] rpl::producer<bool> streamerModeChanges() const { return _streamerMode.changes(); }
+	[[nodiscard]] rpl::producer<bool> boostUploadSpeedValue() const { return _boostUploadSpeed.value(); }
+	[[nodiscard]] rpl::producer<bool> boostUploadSpeedChanges() const { return _boostUploadSpeed.changes(); }
 
 	friend void to_json(nlohmann::json &j, const AyuSettings &s);
 	friend void from_json(const nlohmann::json &j, AyuSettings &s);
@@ -760,6 +764,7 @@ private:
 	rpl::variable<bool> _singleCornerRadius = false;
 	rpl::variable<bool> _streamerMode = false;
 	rpl::variable<bool> _sendWebpAsDocument = true;
+	rpl::variable<bool> _boostUploadSpeed = true;
 
 	rpl::variable<bool> _useGlobalGhostMode = true;
 	std::map<uint64, std::unique_ptr<GhostModeAccountSettings>> _ghostAccounts;

@@ -82,6 +82,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "styles/style_menu_icons.h"
 
 #include <QtCore/QMimeData>
+#include <QtCore/QSemaphore>
 
 // AyuGram includes
 #include "ayu/ayu_settings.h"
@@ -2381,11 +2382,59 @@ void SendFilesBox::addPreparedAsyncFile(Ui::PreparedFile &&file) {
 	addFile(std::move(file));
 	enqueueNextPrepare();
 	if (_list.files.size() > count) {
-		refreshAllAfterChanges(count);
+		const auto remaining = int(_list.filesToProcess.size());
+		const auto throttled = AyuSettings::getInstance().boostUploadSpeed()
+			&& (remaining > 0)
+			&& ((count % 8) != 0);
+		if (!throttled) {
+			refreshAllAfterChanges(count);
+		}
 	}
 	if (!_preparing && _whenReadySend) {
 		_whenReadySend();
 	}
+}
+
+void SendFilesBox::fastTrackRemainingPrepare() {
+	if (_list.filesToProcess.empty()) {
+		return;
+	}
+	auto remaining = std::vector<Ui::PreparedFile>();
+	remaining.reserve(_list.filesToProcess.size());
+	while (!_list.filesToProcess.empty()) {
+		remaining.push_back(std::move(_list.filesToProcess.front()));
+		_list.filesToProcess.pop_front();
+	}
+	_preparing = true;
+	const auto weak = base::make_weak(this);
+	const auto sideLimit = PhotoSideLimit(_sendWay.current().sendLargePhotos());
+	crl::async([weak, sideLimit, remaining = std::move(remaining)]() mutable {
+		QSemaphore sem;
+		for (auto &f : remaining) {
+			if (!f.information) {
+				crl::async([&sem, sideLimit, &f] {
+					Storage::PrepareDetails(f, st::sendMediaPreviewSize, sideLimit);
+					sem.release();
+				});
+			} else {
+				sem.release();
+			}
+		}
+		sem.acquire(int(remaining.size()));
+		crl::on_main([weak, remaining = std::move(remaining)]() mutable {
+			if (const auto strong = weak.get()) {
+				for (auto &f : remaining) {
+					if (f.information) {
+						strong->_list.files.push_back(std::move(f));
+					}
+				}
+				strong->_preparing = false;
+				if (strong->_whenReadySend) {
+					base::take(strong->_whenReadySend)();
+				}
+			}
+		});
+	});
 }
 
 void SendFilesBox::addFile(Ui::PreparedFile &&file) {
@@ -2630,6 +2679,9 @@ void SendFilesBox::send(
 		_whenReadySend = [=] {
 			send(options, ctrlShiftEnter);
 		};
+		if (AyuSettings::getInstance().boostUploadSpeed() && !_list.filesToProcess.empty()) {
+			fastTrackRemainingPrepare();
+		}
 		return;
 	}
 

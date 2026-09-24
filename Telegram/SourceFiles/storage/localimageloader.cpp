@@ -43,7 +43,9 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "main/main_session.h"
 
 #include <QtCore/QBuffer>
+#include <QtCore/QSemaphore>
 #include <QtGui/QImageWriter>
+#include <thread>
 
 // AyuGram includes
 #include "ayu/utils/telegram_helpers.h"
@@ -55,7 +57,14 @@ namespace {
 constexpr auto kThumbnailQuality = 95;
 constexpr auto kThumbnailSize = 320;
 constexpr auto kPhotoUploadPartSize = 32 * 1024;
+constexpr auto kPhotoUploadPartSizeBoosted = 512 * 1024;
 constexpr auto kRecompressAfterBpp = 4;
+
+[[nodiscard]] int PhotoUploadPartSize() {
+	return AyuSettings::getInstance().boostUploadSpeed()
+		? kPhotoUploadPartSizeBoosted
+		: kPhotoUploadPartSize;
+}
 
 using Ui::ValidateThumbDimensions;
 
@@ -337,18 +346,51 @@ void TaskQueueWorker::onTaskAdded() {
 	_inTaskAdded = true;
 
 	bool someTasksLeft = false;
+	const auto boosted = AyuSettings::getInstance().boostUploadSpeed();
 	do {
-		auto task = std::unique_ptr<Task>();
+		auto tasks = std::vector<std::unique_ptr<Task>>();
 		{
 			QMutexLocker lock(&_queue->_tasksToProcessMutex);
 			if (!_queue->_tasksToProcess.empty()) {
-				task = std::move(_queue->_tasksToProcess.front());
-				_queue->_tasksToProcess.pop_front();
-				_queue->_taskInProcessId = task->id();
+				const auto maxBatch = boosted
+					? std::clamp(int(std::thread::hardware_concurrency()), 2, 16)
+					: 1;
+				while (!_queue->_tasksToProcess.empty() && int(tasks.size()) < maxBatch) {
+					tasks.push_back(std::move(_queue->_tasksToProcess.front()));
+					_queue->_tasksToProcess.pop_front();
+				}
+				if (tasks.size() == 1) {
+					_queue->_taskInProcessId = tasks.front()->id();
+				}
 			}
 		}
 
-		if (task) {
+		if (tasks.size() > 1) {
+			QSemaphore sem;
+			for (auto &t : tasks) {
+				crl::async([&sem, taskPtr = t.get()] {
+					taskPtr->process();
+					sem.release();
+				});
+			}
+			sem.acquire(int(tasks.size()));
+
+			bool emitTaskProcessed = false;
+			{
+				QMutexLocker lockToProcess(&_queue->_tasksToProcessMutex);
+				someTasksLeft = !_queue->_tasksToProcess.empty();
+
+				QMutexLocker lockToFinish(&_queue->_tasksToFinishMutex);
+				emitTaskProcessed = _queue->_tasksToFinish.empty();
+				for (auto &t : tasks) {
+					_queue->_tasksToFinish.push_back(std::move(t));
+				}
+			}
+			if (emitTaskProcessed) {
+				taskProcessed();
+			}
+		} else if (tasks.size() == 1) {
+			auto &task = tasks.front();
 			task->process();
 			bool emitTaskProcessed = false;
 			{
@@ -365,6 +407,8 @@ void TaskQueueWorker::onTaskAdded() {
 			if (emitTaskProcessed) {
 				taskProcessed();
 			}
+		} else {
+			someTasksLeft = false;
 		}
 		QCoreApplication::processEvents();
 	} while (someTasksLeft && !thread()->isInterruptionRequested());
@@ -482,10 +526,11 @@ void FilePrepareResult::setFileData(const QByteArray &filedata) {
 		partssize = 0;
 	} else {
 		partssize = filedata.size();
+		const auto partSize = PhotoUploadPartSize();
 		fileparts.reserve(
-			(partssize + kPhotoUploadPartSize - 1) / kPhotoUploadPartSize);
-		for (int32 i = 0, part = 0; i < partssize; i += kPhotoUploadPartSize, ++part) {
-			fileparts.push_back(filedata.mid(i, kPhotoUploadPartSize));
+			(partssize + partSize - 1) / partSize);
+		for (int32 i = 0, part = 0; i < partssize; i += partSize, ++part) {
+			fileparts.push_back(filedata.mid(i, partSize));
 		}
 		filemd5.resize(32);
 		hashMd5Hex(filedata.constData(), filedata.size(), filemd5.data());
@@ -496,10 +541,11 @@ void FilePrepareResult::setThumbData(const QByteArray &thumbdata) {
 	if (!thumbdata.isEmpty()) {
 		thumbbytes = thumbdata;
 		int32 size = thumbdata.size();
+		const auto partSize = PhotoUploadPartSize();
 		thumbparts.reserve(
-			(size + kPhotoUploadPartSize - 1) / kPhotoUploadPartSize);
-		for (int32 i = 0, part = 0; i < size; i += kPhotoUploadPartSize, ++part) {
-			thumbparts.push_back(thumbdata.mid(i, kPhotoUploadPartSize));
+			(size + partSize - 1) / partSize);
+		for (int32 i = 0, part = 0; i < size; i += partSize, ++part) {
+			thumbparts.push_back(thumbdata.mid(i, partSize));
 		}
 		thumbmd5.resize(32);
 		hashMd5Hex(thumbdata.constData(), thumbdata.size(), thumbmd5.data());

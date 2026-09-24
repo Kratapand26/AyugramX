@@ -16,6 +16,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include <QtCore/QTemporaryFile>
 #include <QtGui/QPainter>
 
+#include <thread>
+
 extern "C" {
 #include <libavutil/audio_fifo.h>
 #include <libavutil/samplefmt.h>
@@ -168,6 +170,10 @@ struct ColorDescription {
 	if (output->oformat->flags & AVFMT_GLOBALHEADER) {
 		encoder->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
 	}
+	encoder->thread_count = std::clamp(
+		int(std::thread::hardware_concurrency()),
+		1,
+		16);
 	auto error = AvErrorWrap(avcodec_open2(
 		encoder.get(),
 		encoderCodec,

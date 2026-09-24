@@ -26,6 +26,9 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "storage/storage_account.h"
 #include "apiwrap.h"
 
+// AyuGram includes
+#include "ayu/ayu_settings.h"
+
 #include <QtCore/QFileInfo>
 
 namespace Storage {
@@ -33,6 +36,18 @@ namespace {
 
 // max 1mb uploaded at the same time in each session
 constexpr auto kMaxUploadPerSession = 1024 * 1024;
+
+[[nodiscard]] int MaxUploadPerSession() {
+	return AyuSettings::getInstance().boostUploadSpeed()
+		? (2 * 1024 * 1024)
+		: kMaxUploadPerSession;
+}
+
+[[nodiscard]] crl::time UploadRequestInterval() {
+	return AyuSettings::getInstance().boostUploadSpeed()
+		? crl::time(25)
+		: kUploadRequestInterval;
+}
 
 constexpr auto kDocumentMaxPartsCountDefault = 4000;
 
@@ -141,6 +156,10 @@ Uploader::Entry::Entry(
 
 void Uploader::Entry::setDocSize(int64 size) {
 	docSize = size;
+	if (AyuSettings::getInstance().boostUploadSpeed()) {
+		setPartSize(kDocumentUploadPartSize4);
+		return;
+	}
 	constexpr auto limit0 = 1024 * 1024;
 	constexpr auto limit1 = 32 * limit0;
 	if (docSize >= limit0 || !setPartSize(kDocumentUploadPartSize0)) {
@@ -635,6 +654,9 @@ QByteArray Uploader::readDocPart(not_null<Entry*> entry) {
 
 bool Uploader::canAddDcIndex() const {
 	const auto count = int(_sentPerDcIndex.size());
+	if (AyuSettings::getInstance().boostUploadSpeed()) {
+		return (count < kMaxSessionsCount);
+	}
 	return (count < kMaxSessionsCount)
 		&& (count == int(_dcIndicesWithFastRequests.size()));
 }
@@ -748,7 +770,7 @@ auto Uploader::sendDocPart(not_null<Entry*> entry, uchar dcIndex)
 	const auto itemId = entry->itemId;
 	const auto alreadySent = _sentPerDcIndex[dcIndex];
 	const auto willProbablyBeSent = entry->docPartSize;
-	if (alreadySent + willProbablyBeSent > kMaxUploadPerSession) {
+	if (alreadySent + willProbablyBeSent > MaxUploadPerSession()) {
 		return SendResult::DcIndexFull;
 	}
 
@@ -794,7 +816,7 @@ auto Uploader::sendSlicedPart(not_null<Entry*> entry, uchar dcIndex)
 	const auto itemId = entry->itemId;
 	const auto alreadySent = _sentPerDcIndex[dcIndex];
 	const auto willBeSent = entry->parts->at(entry->partsSent).size();
-	if (alreadySent + willBeSent >= kMaxUploadPerSession) {
+	if (alreadySent + willBeSent >= MaxUploadPerSession()) {
 		return SendResult::DcIndexFull;
 	}
 
@@ -841,20 +863,27 @@ void Uploader::maybeSend() {
 			}
 			const auto result = sendPart(entry, dcIndex);
 			if (result == SendResult::DcIndexFull) {
+				if (AyuSettings::getInstance().boostUploadSpeed()) {
+					usedDcIndices.emplace(dcIndex);
+					break;
+				}
 				return;
 			} else if (result == SendResult::Success) {
 				break;
 			}
 			// If this entry failed, we try the next one.
 		}
-		if (_sentPerDcIndex[dcIndex] >= kAcceptAsFastIfTotalAtLeast) {
+		const auto limit = AyuSettings::getInstance().boostUploadSpeed()
+			? MaxUploadPerSession()
+			: kAcceptAsFastIfTotalAtLeast;
+		if (_sentPerDcIndex[dcIndex] >= limit) {
 			usedDcIndices.emplace(dcIndex);
 		}
 	}
 	if (usedDcIndices.empty()) {
 		_nextTimer.cancel();
 	} else {
-		_nextTimer.callOnce(kUploadRequestInterval);
+		_nextTimer.callOnce(UploadRequestInterval());
 	}
 }
 
@@ -950,7 +979,8 @@ void Uploader::partLoaded(const MTPBool &result, mtpRequestId requestId) {
 		_dcIndicesWithFastRequests.clear();
 		if (slow) {
 			const auto elapsed = (now - _latestDcIndexRemoved);
-			const auto remove = (elapsed >= kWaitForNormalizeTimeout);
+			const auto remove = (elapsed >= kWaitForNormalizeTimeout)
+				&& !AyuSettings::getInstance().boostUploadSpeed();
 			if (remove && _sentPerDcIndex.size() > 1) {
 				DEBUG_LOG(("Uploader: Slow request, removing dc index."));
 				removeDcIndex();

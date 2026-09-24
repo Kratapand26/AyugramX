@@ -9172,3 +9172,5 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "ayu_AboutText1" = "ToS breaking Telegram client based on {api_link}.";
 "ayu_UpdateAyuGram" = "Update AyuGram";
 "ayu_UtilityRestartRequired" = "The app will close in 5 seconds.";
+"ayu_BoostUploadSpeed" = "Boost Upload Speed";
+"ayu_BoostUploadSpeed_about" = "Upload photos, videos, and files using parallel connections and optimized chunks for maximum speed.";

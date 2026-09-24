@@ -1075,6 +1075,12 @@ void AyuSettings::setStreamerMode(bool val) {
 	save();
 }
 
+void AyuSettings::setBoostUploadSpeed(bool val) {
+	if (_boostUploadSpeed.current() == val) return;
+	_boostUploadSpeed = val;
+	save();
+}
+
 bool AyuSettings::localFolderTagsEnabled(uint64 userId) const {
 	const auto it = _localFolderTags.find(userId);
 	return (it != _localFolderTags.end()) ? it->second.enabled : false;
@@ -1286,6 +1292,7 @@ void to_json(nlohmann::json &j, const AyuSettings &s) {
 		{"avatarCorners", s._avatarCorners.current()},
 		{"singleCornerRadius", s._singleCornerRadius.current()},
 		{"streamerMode", s._streamerMode.current()},
+		{"boostUploadSpeed", s._boostUploadSpeed.current()},
 		{"messageShotSettings", s._messageShotSettings}
 	};
 
@@ -1449,6 +1456,7 @@ void from_json(const nlohmann::json &j, AyuSettings &s) {
 	s._avatarCorners = j.value("avatarCorners", defaults._avatarCorners.current());
 	s._singleCornerRadius = j.value("singleCornerRadius", defaults._singleCornerRadius.current());
 	s._streamerMode = j.value("streamerMode", defaults._streamerMode.current());
+	s._boostUploadSpeed = j.value("boostUploadSpeed", defaults._boostUploadSpeed.current());
 
 	if (j.contains("messageShotSettings") && j["messageShotSettings"].is_object()) {
 		j["messageShotSettings"].get_to(s._messageShotSettings);
