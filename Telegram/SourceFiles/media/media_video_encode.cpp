@@ -171,9 +171,9 @@ struct ColorDescription {
 		encoder->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
 	}
 	encoder->thread_count = std::clamp(
-		int(std::thread::hardware_concurrency()),
-		1,
-		16);
+		int(std::thread::hardware_concurrency() / 2),
+		2,
+		4);
 	auto error = AvErrorWrap(avcodec_open2(
 		encoder.get(),
 		encoderCodec,

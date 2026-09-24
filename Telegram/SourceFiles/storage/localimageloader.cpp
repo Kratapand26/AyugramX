@@ -353,7 +353,7 @@ void TaskQueueWorker::onTaskAdded() {
 			QMutexLocker lock(&_queue->_tasksToProcessMutex);
 			if (!_queue->_tasksToProcess.empty()) {
 				const auto maxBatch = boosted
-					? std::clamp(int(std::thread::hardware_concurrency()), 2, 16)
+					? std::clamp(int(std::thread::hardware_concurrency() / 2), 2, 4)
 					: 1;
 				while (!_queue->_tasksToProcess.empty() && int(tasks.size()) < maxBatch) {
 					tasks.push_back(std::move(_queue->_tasksToProcess.front()));
