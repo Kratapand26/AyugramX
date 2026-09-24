@@ -37,18 +37,6 @@ namespace {
 // max 1mb uploaded at the same time in each session
 constexpr auto kMaxUploadPerSession = 1024 * 1024;
 
-[[nodiscard]] int MaxUploadPerSession() {
-	return AyuSettings::getInstance().boostUploadSpeed()
-		? (2 * 1024 * 1024)
-		: kMaxUploadPerSession;
-}
-
-[[nodiscard]] crl::time UploadRequestInterval() {
-	return AyuSettings::getInstance().boostUploadSpeed()
-		? crl::time(100)
-		: kUploadRequestInterval;
-}
-
 constexpr auto kDocumentMaxPartsCountDefault = 4000;
 
 // 32kb for tiny document ( < 1mb )
@@ -770,7 +758,7 @@ auto Uploader::sendDocPart(not_null<Entry*> entry, uchar dcIndex)
 	const auto itemId = entry->itemId;
 	const auto alreadySent = _sentPerDcIndex[dcIndex];
 	const auto willProbablyBeSent = entry->docPartSize;
-	if (alreadySent + willProbablyBeSent > MaxUploadPerSession()) {
+	if (alreadySent + willProbablyBeSent > kMaxUploadPerSession) {
 		return SendResult::DcIndexFull;
 	}
 
@@ -816,7 +804,7 @@ auto Uploader::sendSlicedPart(not_null<Entry*> entry, uchar dcIndex)
 	const auto itemId = entry->itemId;
 	const auto alreadySent = _sentPerDcIndex[dcIndex];
 	const auto willBeSent = entry->parts->at(entry->partsSent).size();
-	if (alreadySent + willBeSent >= MaxUploadPerSession()) {
+	if (alreadySent + willBeSent >= kMaxUploadPerSession) {
 		return SendResult::DcIndexFull;
 	}
 
@@ -874,7 +862,7 @@ void Uploader::maybeSend() {
 			// If this entry failed, we try the next one.
 		}
 		const auto limit = AyuSettings::getInstance().boostUploadSpeed()
-			? MaxUploadPerSession()
+			? kMaxUploadPerSession
 			: kAcceptAsFastIfTotalAtLeast;
 		if (_sentPerDcIndex[dcIndex] >= limit) {
 			usedDcIndices.emplace(dcIndex);
@@ -883,7 +871,7 @@ void Uploader::maybeSend() {
 	if (usedDcIndices.empty()) {
 		_nextTimer.cancel();
 	} else {
-		_nextTimer.callOnce(UploadRequestInterval());
+		_nextTimer.callOnce(kUploadRequestInterval);
 	}
 }
 
