@@ -45,7 +45,7 @@ constexpr auto kMaxUploadPerSession = 1024 * 1024;
 
 [[nodiscard]] crl::time UploadRequestInterval() {
 	return AyuSettings::getInstance().boostUploadSpeed()
-		? crl::time(25)
+		? crl::time(100)
 		: kUploadRequestInterval;
 }
 
