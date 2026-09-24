@@ -117,6 +117,13 @@ void SubmitChatInvite(
 		not_null<Main::Session*> session,
 		const QString &hash,
 		bool isGroup) {
+	const auto strongController = weak.get();
+	if (session->api().checkJoinFloodWait(strongController ? strongController->uiShow() : nullptr)) {
+		if (strongController) {
+			strongController->hideLayer();
+		}
+		return;
+	}
 	session->api().request(MTPmessages_ImportChatInvite(
 		MTP_string(hash)
 	)).done([=](const MTPmessages_ChatInviteJoinResult &result) {
@@ -171,6 +178,12 @@ void SubmitChatInvite(
 		const auto strongController = weak.get();
 		if (!strongController) {
 			return;
+		} else if (MTP::IsFloodError(error)) {
+			const auto seconds = MTP::FloodWaitDuration(error);
+			session->api().setJoinFloodWait(seconds);
+			strongController->hideLayer();
+			session->api().showJoinFloodWaitToast(strongController->uiShow(), seconds);
+			return;
 		} else if (type == u"CHANNELS_TOO_MUCH"_q) {
 			strongController->show(
 				Box(ChannelsLimitBox, &strongController->session()));
@@ -189,7 +202,7 @@ void SubmitChatInvite(
 				return tr::lng_group_invite_bad_link(tr::now);
 			}
 		}(), ApiWrap::kJoinErrorDuration);
-	}).send();
+	}).handleFloodErrors().send();
 }
 
 void ConfirmSubscriptionBox(
@@ -671,6 +684,9 @@ void CheckChatInvite(
 		ChannelData *invitePeekChannel,
 		Fn<void()> loaded) {
 	const auto session = &controller->session();
+	if (session->api().checkJoinFloodWait(controller->uiShow())) {
+		return;
+	}
 	const auto weak = base::make_weak(controller);
 	session->api().checkChatInvite(hash, [=](const MTPChatInvite &result) {
 		const auto strong = weak.get();
@@ -742,8 +758,10 @@ void CheckChatInvite(
 		});
 	}, [=](const MTP::Error &error) {
 		if (MTP::IsFloodError(error)) {
+			const auto seconds = MTP::FloodWaitDuration(error);
+			session->api().setJoinFloodWait(seconds);
 			if (const auto strong = weak.get()) {
-				strong->show(Ui::MakeInformBox(tr::lng_flood_error()));
+				session->api().showJoinFloodWaitToast(strong->uiShow(), seconds);
 			}
 			return;
 		}

@@ -150,6 +150,27 @@ QString FormatDurationWords(qint64 duration) {
 	return tr::lng_seconds(tr::now, lt_count, duration);
 }
 
+QString FormatDetailedDuration(int totalSeconds) {
+	if (totalSeconds <= 0) {
+		return tr::lng_seconds(tr::now, lt_count, 0);
+	}
+	const auto hours = totalSeconds / 3600;
+	const auto minutes = (totalSeconds % 3600) / 60;
+	const auto seconds = totalSeconds % 60;
+
+	auto parts = QStringList();
+	if (hours > 0) {
+		parts.append(tr::lng_hours(tr::now, lt_count, hours));
+	}
+	if (minutes > 0) {
+		parts.append(tr::lng_minutes(tr::now, lt_count, minutes));
+	}
+	if (seconds > 0 || parts.isEmpty()) {
+		parts.append(tr::lng_seconds(tr::now, lt_count, seconds));
+	}
+	return parts.join(u" "_q);
+}
+
 QString FormatDurationWordsSlowmode(qint64 duration) {
 	if (duration > 59) {
 		auto minutes = (duration / 60);

@@ -291,6 +291,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_animated_emoji_saved_open" = "Open";
 
 "lng_flood_error" = "Too many tries. Please try again later.";
+"lng_flood_error_wait" = "Too many requests. Please try again in {duration}.";
 "lng_edit_error" = "You can't edit this message.";
 "lng_error_phone_flood" = "Sorry, you have deleted and re-created your account too many times recently. Please wait for a few days before signing up again.";
 "lng_error_start_minimized_passcoded" = "You have set a local passcode, so Telegram Desktop can't be launched minimized; it will ask you to enter your passcode before it can start working.";

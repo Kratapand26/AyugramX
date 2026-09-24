@@ -100,6 +100,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ui/text/text_utilities.h"
 #include "ui/chat/attach/attach_prepare.h"
 #include "ui/toast/toast.h"
+#include "ui/text/format_values.h"
 #include "support/support_helper.h"
 #include "settings/sections/settings_premium.h"
 #include "storage/localimageloader.h"
@@ -1919,12 +1920,50 @@ void ApiWrap::saveStickerSets(
 	}
 }
 
+int ApiWrap::joinFloodWaitRemainingSeconds() const {
+	const auto now = crl::now();
+	return (_joinFloodWaitUntil > now)
+		? int((_joinFloodWaitUntil - now + 999) / 1000)
+		: 0;
+}
+
+void ApiWrap::setJoinFloodWait(int seconds) {
+	if (seconds > 0) {
+		_joinFloodWaitUntil = std::max(
+			_joinFloodWaitUntil,
+			crl::now() + (seconds * crl::time(1000)));
+	}
+}
+
+bool ApiWrap::checkJoinFloodWait(std::shared_ptr<Ui::Show> show) {
+	const auto remaining = joinFloodWaitRemainingSeconds();
+	if (remaining <= 0) {
+		return false;
+	}
+	showJoinFloodWaitToast(show, remaining);
+	return true;
+}
+
+void ApiWrap::showJoinFloodWaitToast(std::shared_ptr<Ui::Show> show, int seconds) {
+	if (show) {
+		show->showToast(
+			tr::lng_flood_error_wait(
+				tr::now,
+				lt_duration,
+				Ui::FormatDetailedDuration(seconds)),
+			kFloodWaitToastDuration);
+	}
+}
+
 void ApiWrap::joinChannel(not_null<ChannelData*> channel) {
 	if (channel->amIn()) {
 		session().changes().peerUpdated(
 			channel,
 			Data::PeerUpdate::Flag::ChannelAmIn);
 	} else if (!_channelAmInRequests.contains(channel)) {
+		if (checkJoinFloodWait(ShowForPeer(channel))) {
+			return;
+		}
 		const auto requestId = request(MTPchannels_JoinChannel(
 			channel->inputChannel()
 		)).done([=](const MTPmessages_ChatInviteJoinResult &result) {
@@ -1945,7 +1984,11 @@ void ApiWrap::joinChannel(not_null<ChannelData*> channel) {
 			const auto &type = error.type();
 
 			const auto show = ShowForPeer(channel);
-			if (type == u"CHANNEL_PRIVATE"_q
+			if (MTP::IsFloodError(error)) {
+				const auto seconds = MTP::FloodWaitDuration(error);
+				setJoinFloodWait(seconds);
+				showJoinFloodWaitToast(show, seconds);
+			} else if (type == u"CHANNEL_PRIVATE"_q
 				&& channel->invitePeekExpires()) {
 				channel->privateErrorReceived();
 			} else if (type == u"CHANNELS_TOO_MUCH"_q) {
@@ -1972,7 +2015,7 @@ void ApiWrap::joinChannel(not_null<ChannelData*> channel) {
 				}
 			}
 			_channelAmInRequests.remove(channel);
-		}).send();
+		}).handleFloodErrors().send();
 
 		_channelAmInRequests.emplace(channel, requestId);
 

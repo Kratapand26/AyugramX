@@ -22,6 +22,7 @@ inline const QString kCreditsCurrency = u"XTR"_q;
 [[nodiscard]] QString FormatDateTimeSavedFrom(QDateTime date);
 [[nodiscard]] QString FormatDurationText(qint64 duration);
 [[nodiscard]] QString FormatDurationWords(qint64 duration);
+[[nodiscard]] QString FormatDetailedDuration(int totalSeconds);
 [[nodiscard]] QString FormatDurationWordsSlowmode(qint64 duration);
 [[nodiscard]] QString FormatDurationAndSizeText(qint64 duration, qint64 size);
 [[nodiscard]] QString FormatGifAndSizeText(qint64 size);

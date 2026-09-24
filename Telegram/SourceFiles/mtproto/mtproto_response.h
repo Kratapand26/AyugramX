@@ -49,6 +49,20 @@ inline bool IsFloodError(const Error &error) {
 	return IsFloodError(error.type());
 }
 
+inline int FloodWaitDuration(const QString &type) {
+	if (IsFloodError(type)) {
+		const auto underscore = type.lastIndexOf('_');
+		if (underscore >= 0) {
+			return type.mid(underscore + 1).toInt();
+		}
+	}
+	return 0;
+}
+
+inline int FloodWaitDuration(const Error &error) {
+	return FloodWaitDuration(error.type());
+}
+
 inline bool IsTemporaryError(const Error &error) {
 	return error.code() < 0 || error.code() >= 500 || IsFloodError(error);
 }

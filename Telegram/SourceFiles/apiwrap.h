@@ -296,6 +296,11 @@ public:
 	void joinChannel(not_null<ChannelData*> channel);
 	void leaveChannel(not_null<ChannelData*> channel);
 
+	[[nodiscard]] int joinFloodWaitRemainingSeconds() const;
+	void setJoinFloodWait(int seconds);
+	bool checkJoinFloodWait(std::shared_ptr<Ui::Show> show);
+	void showJoinFloodWaitToast(std::shared_ptr<Ui::Show> show, int seconds);
+
 	void requestNotifySettings(const MTPInputNotifyPeer &peer);
 	void updateNotifySettingsDelayed(not_null<const Data::Thread*> thread);
 	void updateNotifySettingsDelayed(not_null<const PeerData*> peer);
@@ -472,6 +477,7 @@ public:
 	void updatePrivacyLastSeens();
 
 	static constexpr auto kJoinErrorDuration = 5 * crl::time(1000);
+	static constexpr auto kFloodWaitToastDuration = 4 * crl::time(1000);
 
 	static void ProcessRecentSelfForwards(
 		not_null<Main::Session*> session,
@@ -866,5 +872,7 @@ private:
 
 	base::flat_map<FullMsgId, QString> _unlikelyMessageLinks;
 	base::flat_map<FullStoryId, QString> _unlikelyStoryLinks;
+
+	crl::time _joinFloodWaitUntil = 0;
 
 };
