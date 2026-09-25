@@ -285,9 +285,10 @@ void DownloadManagerMtproto::requestSucceeded(
 	data.successes = std::min(data.successes + 1, kMaxTrackedSuccesses);
 	const auto boosted = AyuSettings::getInstance().boostDownloadSpeed()
 		&& _queues[dcId].hasLargeTask(kMinBoostFileSize);
-	const auto successesNeeded = boosted
+	const auto successesNeeded = (boosted && (dc.sessionRemoveTimes == 0))
 		? 1
 		: (dc.sessionRemoveTimes + 1) * kRetryAddSessionSuccesses;
+
 	const auto notEnough = ranges::any_of(
 		dc.sessions,
 		_1 < successesNeeded,
