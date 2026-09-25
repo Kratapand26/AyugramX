@@ -54,6 +54,8 @@ public:
 
 	Data::FileOrigin fileOrigin() const override;
 	uint64 objId() const override;
+	int64 totalSize() const override;
+
 
 private:
 	Storage::Cache::Key cacheKey() const override;

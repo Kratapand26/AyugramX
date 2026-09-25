@@ -111,16 +111,20 @@ void DownloadManagerMtproto::Queue::removeSession(int index) {
 	}
 }
 
+bool DownloadManagerMtproto::Queue::hasLargeTask(int64 threshold) const {
+	return ranges::any_of(_tasks, [&](const Enqueued &enqueued) {
+		return enqueued.task->totalSize() >= threshold;
+	});
+}
+
 DownloadManagerMtproto::DcSessionBalanceData::DcSessionBalanceData()
 : maxWaitedAmount(kStartWaitedInSession) {
 }
 
-
 DownloadManagerMtproto::DcBalanceData::DcBalanceData()
-: sessions(AyuSettings::getInstance().boostDownloadSpeed()
-	? kMaxSessionsCount
-	: kStartSessionsCount) {
+: sessions(kStartSessionsCount) {
 }
+
 
 
 DownloadManagerMtproto::DownloadManagerMtproto(not_null<ApiWrap*> api)
@@ -184,15 +188,9 @@ void DownloadManagerMtproto::checkSendNextAfterSuccess(MTP::DcId dcId) {
 }
 
 bool DownloadManagerMtproto::trySendNextPart(MTP::DcId dcId, Queue &queue) {
-	auto &balanceData = _balanceData[dcId];
-	if (AyuSettings::getInstance().boostDownloadSpeed()) {
-		if (balanceData.sessions.size() < kMaxSessionsCount
-			&& (!balanceData.lastSessionRemove
-				|| crl::now() >= balanceData.lastSessionRemove + (balanceData.sessionRemoveTimes + 1) * kRetryAddSessionTimeout)) {
-			balanceData.sessions.resize(kMaxSessionsCount);
-		}
-	}
+	const auto &balanceData = _balanceData[dcId];
 	const auto &sessions = balanceData.sessions;
+
 
 
 	const auto bestIndex = [&] {
@@ -285,9 +283,14 @@ void DownloadManagerMtproto::requestSucceeded(
 			).arg(data.maxWaitedAmount));
 	}
 	data.successes = std::min(data.successes + 1, kMaxTrackedSuccesses);
+	const auto boosted = AyuSettings::getInstance().boostDownloadSpeed()
+		&& _queues[dcId].hasLargeTask(kMinBoostFileSize);
+	const auto successesNeeded = boosted
+		? 1
+		: (dc.sessionRemoveTimes + 1) * kRetryAddSessionSuccesses;
 	const auto notEnough = ranges::any_of(
 		dc.sessions,
-		_1 < (dc.sessionRemoveTimes + 1) * kRetryAddSessionSuccesses,
+		_1 < successesNeeded,
 		&DcSessionBalanceData::successes);
 	if (notEnough) {
 		return;
@@ -295,6 +298,7 @@ void DownloadManagerMtproto::requestSucceeded(
 	for (auto &session : dc.sessions) {
 		session.successes = 0;
 	}
+
 	if (dc.timeouts > 0) {
 		--dc.timeouts;
 		return;
@@ -415,24 +419,14 @@ void DownloadManagerMtproto::killSessions(MTP::DcId dcId) {
 	if (i != end(_balanceData)) {
 		auto &dc = i->second;
 		Assert(dc.totalRequested == 0);
-		auto sessions = base::take(dc.sessions);
-		dc = DcBalanceData();
-		for (auto j = 0; j != int(sessions.size()); ++j) {
-			Assert(sessions[j].requested == 0);
+		for (auto j = 0; j != int(dc.sessions.size()); ++j) {
+			Assert(dc.sessions[j].requested == 0);
 			api().instance().stopSession(MTP::downloadDcId(dcId, j));
 		}
-		if (AyuSettings::getInstance().boostDownloadSpeed()) {
-			sessions.resize(kMaxSessionsCount);
-			for (auto &session : sessions) {
-				session = DcSessionBalanceData();
-			}
-			dc.sessions = base::take(sessions);
-		} else {
-			dc.sessions.resize(kStartSessionsCount);
-			dc.sessions[0] = DcSessionBalanceData();
-		}
+		dc = DcBalanceData();
 	}
 }
+
 
 
 DownloadMtprotoTask::DownloadMtprotoTask(

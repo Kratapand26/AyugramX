@@ -26,6 +26,8 @@ public:
 
 	[[nodiscard]] Storage::Cache::Key baseCacheKey() const override;
 	[[nodiscard]] int64 size() const override;
+	[[nodiscard]] int64 totalSize() const override;
+
 
 	void load(int64 offset) override;
 	void cancel(int64 offset) override;

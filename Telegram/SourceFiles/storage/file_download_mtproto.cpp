@@ -127,6 +127,11 @@ uint64 mtpFileLoader::objId() const {
 	return DownloadMtprotoTask::objectId();
 }
 
+int64 mtpFileLoader::totalSize() const {
+	return _fullSize ? _fullSize : _loadSize;
+}
+
+
 bool mtpFileLoader::readyToRequest() const {
 	return !_finished
 		&& !_lastComplete

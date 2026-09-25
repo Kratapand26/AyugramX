@@ -42,6 +42,11 @@ int64 LoaderMtproto::size() const {
 	return _size;
 }
 
+int64 LoaderMtproto::totalSize() const {
+	return _size;
+}
+
+
 void LoaderMtproto::load(int64 offset) {
 	crl::on_main(this, [=] {
 		if (_downloader) {

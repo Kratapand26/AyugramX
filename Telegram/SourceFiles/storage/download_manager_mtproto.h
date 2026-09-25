@@ -24,6 +24,8 @@ namespace Storage {
 // and then we get a CDN-redirect where we support only
 // fixed part size download for hash checking.
 constexpr auto kDownloadPartSize = 128 * 1024;
+constexpr auto kMinBoostFileSize = 10 * 1024 * 1024;
+
 
 class DownloadMtprotoTask;
 
@@ -72,7 +74,9 @@ private:
 		void resetGeneration();
 		[[nodiscard]] bool empty() const;
 		[[nodiscard]] Task *nextTask(bool onlyHighestPriority) const;
+		[[nodiscard]] bool hasLargeTask(int64 threshold) const;
 		void removeSession(int index);
+
 
 	private:
 		struct Enqueued {
@@ -153,8 +157,12 @@ public:
 	[[nodiscard]] Data::FileOrigin fileOrigin() const;
 	[[nodiscard]] uint64 objectId() const;
 	[[nodiscard]] const Location &location() const;
+	[[nodiscard]] virtual int64 totalSize() const {
+		return 0;
+	}
 
 	[[nodiscard]] virtual bool readyToRequest() const = 0;
+
 	void loadPart(int sessionIndex);
 	void removeSession(int sessionIndex);
 
