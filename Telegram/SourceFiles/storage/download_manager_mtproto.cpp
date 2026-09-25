@@ -112,10 +112,9 @@ void DownloadManagerMtproto::Queue::removeSession(int index) {
 }
 
 DownloadManagerMtproto::DcSessionBalanceData::DcSessionBalanceData()
-: maxWaitedAmount(AyuSettings::getInstance().boostDownloadSpeed()
-	? kMaxWaitedInSession
-	: kStartWaitedInSession) {
+: maxWaitedAmount(kStartWaitedInSession) {
 }
+
 
 DownloadManagerMtproto::DcBalanceData::DcBalanceData()
 : sessions(AyuSettings::getInstance().boostDownloadSpeed()
@@ -192,13 +191,9 @@ bool DownloadManagerMtproto::trySendNextPart(MTP::DcId dcId, Queue &queue) {
 				|| crl::now() >= balanceData.lastSessionRemove + (balanceData.sessionRemoveTimes + 1) * kRetryAddSessionTimeout)) {
 			balanceData.sessions.resize(kMaxSessionsCount);
 		}
-		for (auto &session : balanceData.sessions) {
-			if (session.maxWaitedAmount < kMaxWaitedInSession) {
-				session.maxWaitedAmount = kMaxWaitedInSession;
-			}
-		}
 	}
 	const auto &sessions = balanceData.sessions;
+
 
 	const auto bestIndex = [&] {
 		const auto proj = [](const DcSessionBalanceData &data) {

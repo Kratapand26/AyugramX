@@ -772,7 +772,8 @@ private:
 	rpl::variable<bool> _streamerMode = false;
 	rpl::variable<bool> _sendWebpAsDocument = true;
 	rpl::variable<bool> _boostUploadSpeed = true;
-	rpl::variable<bool> _boostDownloadSpeed = true;
+	rpl::variable<bool> _boostDownloadSpeed = false;
+
 
 
 	rpl::variable<bool> _useGlobalGhostMode = true;
