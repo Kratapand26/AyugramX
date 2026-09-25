@@ -9175,3 +9175,6 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "ayu_UtilityRestartRequired" = "The app will close in 5 seconds.";
 "ayu_BoostUploadSpeed" = "Boost Upload Speed";
 "ayu_BoostUploadSpeed_about" = "Upload photos, videos, and files using parallel connections and optimized chunks for maximum speed.";
+"ayu_BoostDownloadSpeed" = "Boost Download Speed";
+"ayu_BoostDownloadSpeed_about" = "Download photos, videos, and files using parallel connections and maximized pipeline window.";
+

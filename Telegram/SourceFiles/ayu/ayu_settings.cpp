@@ -1081,6 +1081,13 @@ void AyuSettings::setBoostUploadSpeed(bool val) {
 	save();
 }
 
+void AyuSettings::setBoostDownloadSpeed(bool val) {
+	if (_boostDownloadSpeed.current() == val) return;
+	_boostDownloadSpeed = val;
+	save();
+}
+
+
 bool AyuSettings::localFolderTagsEnabled(uint64 userId) const {
 	const auto it = _localFolderTags.find(userId);
 	return (it != _localFolderTags.end()) ? it->second.enabled : false;
@@ -1293,7 +1300,9 @@ void to_json(nlohmann::json &j, const AyuSettings &s) {
 		{"singleCornerRadius", s._singleCornerRadius.current()},
 		{"streamerMode", s._streamerMode.current()},
 		{"boostUploadSpeed", s._boostUploadSpeed.current()},
+		{"boostDownloadSpeed", s._boostDownloadSpeed.current()},
 		{"messageShotSettings", s._messageShotSettings}
+
 	};
 
 	// AyuGram: Serialize local folder tag settings
@@ -1457,6 +1466,8 @@ void from_json(const nlohmann::json &j, AyuSettings &s) {
 	s._singleCornerRadius = j.value("singleCornerRadius", defaults._singleCornerRadius.current());
 	s._streamerMode = j.value("streamerMode", defaults._streamerMode.current());
 	s._boostUploadSpeed = j.value("boostUploadSpeed", defaults._boostUploadSpeed.current());
+	s._boostDownloadSpeed = j.value("boostDownloadSpeed", defaults._boostDownloadSpeed.current());
+
 
 	if (j.contains("messageShotSettings") && j["messageShotSettings"].is_object()) {
 		j["messageShotSettings"].get_to(s._messageShotSettings);

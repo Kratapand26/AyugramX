@@ -213,6 +213,14 @@ void BuildQoLToggles(SectionBuilder &builder, AyuSectionBuilder &ayu) {
 		.setter = &AyuSettings::setBoostUploadSpeed,
 	});
 
+	ayu.addSettingToggle({
+		.id = u"ayu/boostDownloadSpeed"_q,
+		.title = tr::ayu_BoostDownloadSpeed(),
+		.getter = &AyuSettings::boostDownloadSpeed,
+		.setter = &AyuSettings::setBoostDownloadSpeed,
+	});
+
+
 	ayu.addSectionDivider();
 
 	const auto zalgoButton = builder.addButton({

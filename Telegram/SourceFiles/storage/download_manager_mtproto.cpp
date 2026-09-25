@@ -15,6 +15,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "data/data_document.h"
 #include "apiwrap.h"
 #include "base/openssl_help.h"
+#include "ayu/ayu_settings.h"
+
 
 namespace Storage {
 namespace {
@@ -110,12 +112,17 @@ void DownloadManagerMtproto::Queue::removeSession(int index) {
 }
 
 DownloadManagerMtproto::DcSessionBalanceData::DcSessionBalanceData()
-: maxWaitedAmount(kStartWaitedInSession) {
+: maxWaitedAmount(AyuSettings::getInstance().boostDownloadSpeed()
+	? kMaxWaitedInSession
+	: kStartWaitedInSession) {
 }
 
 DownloadManagerMtproto::DcBalanceData::DcBalanceData()
-: sessions(kStartSessionsCount) {
+: sessions(AyuSettings::getInstance().boostDownloadSpeed()
+	? kMaxSessionsCount
+	: kStartSessionsCount) {
 }
+
 
 DownloadManagerMtproto::DownloadManagerMtproto(not_null<ApiWrap*> api)
 : _api(api)
@@ -178,8 +185,21 @@ void DownloadManagerMtproto::checkSendNextAfterSuccess(MTP::DcId dcId) {
 }
 
 bool DownloadManagerMtproto::trySendNextPart(MTP::DcId dcId, Queue &queue) {
-	const auto &balanceData = _balanceData[dcId];
+	auto &balanceData = _balanceData[dcId];
+	if (AyuSettings::getInstance().boostDownloadSpeed()) {
+		if (balanceData.sessions.size() < kMaxSessionsCount
+			&& (!balanceData.lastSessionRemove
+				|| crl::now() >= balanceData.lastSessionRemove + (balanceData.sessionRemoveTimes + 1) * kRetryAddSessionTimeout)) {
+			balanceData.sessions.resize(kMaxSessionsCount);
+		}
+		for (auto &session : balanceData.sessions) {
+			if (session.maxWaitedAmount < kMaxWaitedInSession) {
+				session.maxWaitedAmount = kMaxWaitedInSession;
+			}
+		}
+	}
 	const auto &sessions = balanceData.sessions;
+
 	const auto bestIndex = [&] {
 		const auto proj = [](const DcSessionBalanceData &data) {
 			return (data.requested < data.maxWaitedAmount)
@@ -404,12 +424,21 @@ void DownloadManagerMtproto::killSessions(MTP::DcId dcId) {
 		dc = DcBalanceData();
 		for (auto j = 0; j != int(sessions.size()); ++j) {
 			Assert(sessions[j].requested == 0);
-			sessions[j] = DcSessionBalanceData();
 			api().instance().stopSession(MTP::downloadDcId(dcId, j));
 		}
-		dc.sessions = base::take(sessions);
+		if (AyuSettings::getInstance().boostDownloadSpeed()) {
+			sessions.resize(kMaxSessionsCount);
+			for (auto &session : sessions) {
+				session = DcSessionBalanceData();
+			}
+			dc.sessions = base::take(sessions);
+		} else {
+			dc.sessions.resize(kStartSessionsCount);
+			dc.sessions[0] = DcSessionBalanceData();
+		}
 	}
 }
+
 
 DownloadMtprotoTask::DownloadMtprotoTask(
 	not_null<DownloadManagerMtproto*> owner,
