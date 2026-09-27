@@ -362,9 +362,7 @@ void AddDownloadFilesAction(
 	for (const auto &selectedItem : selectedItems) {
 		const auto &id = selectedItem.msgId;
 		const auto item = window->session().data().message(id);
-		if (!Collected(item, docs, photos)) {
-			return;
-		}
+		Collected(item, docs, photos);
 	}
 	if (docs.empty() && photos.empty()) {
 		return;
@@ -394,9 +392,7 @@ void AddDownloadFilesAction(
 	auto docs = Documents();
 	auto photos = Photos();
 	for (const auto &item : items) {
-		if (!Collected(item, docs, photos)) {
-			return;
-		}
+		Collected(item, docs, photos);
 	}
 	if (docs.empty() && photos.empty()) {
 		return;
