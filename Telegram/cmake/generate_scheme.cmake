@@ -24,6 +24,8 @@ function(generate_scheme target_name script scheme_files)
     BYPRODUCTS
         ${gen_files}
     COMMAND
+        ${CMAKE_COMMAND} -E env
+        "AYU_LIB_TL_PATH=${ayu_lib_tl_generator_root}/tl"
         ${Python3_EXECUTABLE}
         ${script}
         -o${gen_dst}/scheme
@@ -31,8 +33,9 @@ function(generate_scheme target_name script scheme_files)
     COMMENT "Generating scheme (${target_name})"
     DEPENDS
         ${script}
-        ${submodules_loc}/lib_tl/tl/generate_tl.py
+        ${ayu_lib_tl_generator_root}/tl/generate_tl.py
         ${scheme_files}
+    VERBATIM
     )
     generate_target(${target_name} scheme ${gen_timestamp} "${gen_files}" ${gen_dst})
 endfunction()

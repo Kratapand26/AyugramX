@@ -5,6 +5,7 @@
 *.diff text eol=lf
 *.bat text eol=crlf
 Telegram/cmake/ayu_codegen.patch whitespace=-blank-at-eol,-space-before-tab,-blank-at-eof
+Telegram/cmake/ayu_lib_tl.patch whitespace=-blank-at-eol,-space-before-tab,-blank-at-eof
 
 # Ensure lottie animations are treated as binary files
 *.lottie binary

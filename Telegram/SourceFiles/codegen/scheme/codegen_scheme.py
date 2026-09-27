@@ -9,7 +9,8 @@ import glob, re, binascii, os, sys
 
 sys.dont_write_bytecode = True
 scriptPath = os.path.dirname(os.path.realpath(__file__))
-sys.path.append(scriptPath + '/../../../lib_tl/tl')
+sys.path.insert(0, os.environ.get(
+  'AYU_LIB_TL_PATH', scriptPath + '/../../../lib_tl/tl'))
 from generate_tl import generate
 
 generate({
