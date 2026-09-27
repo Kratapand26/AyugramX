@@ -92,22 +92,26 @@ using Photos = std::vector<std::pair<not_null<PhotoData*>, FullMsgId>>;
 	return QString("%1- %2").arg(number).arg(name);
 }
 
-void Added(
+[[nodiscard]] bool Collected(
 		HistoryItem *item,
 		Documents &documents,
 		Photos &photos) {
-	if (item && !item->forbidsForward()) {
-		if (const auto media = item->media()) {
-			const bool isForum = (item->topicRootId() != 0);
-			if (const auto photo = media->photo()) {
-				photos.emplace_back(photo, item->fullId());
-			} else if (const auto document = media->document()) {
-				if (!isForum || !document->sticker()) {
-					documents.emplace_back(document, item->fullId());
-				}
+	if (!item) {
+		return false;
+	} else if (item->forbidsSaving()) {
+		return true;
+	} else if (const auto media = item->media()) {
+		if (const auto photo = media->photo()) {
+			photos.emplace_back(photo, item->fullId());
+			return true;
+		} else if (const auto document = media->document()) {
+			if (!item->topicRootId() || !document->sticker()) {
+				documents.emplace_back(document, item->fullId());
 			}
+			return true;
 		}
 	}
+	return false;
 }
 
 void AddAction(
@@ -358,17 +362,19 @@ void AddDownloadFilesAction(
 	for (const auto &selectedItem : selectedItems) {
 		const auto &id = selectedItem.msgId;
 		const auto item = window->session().data().message(id);
-		Added(item, docs, photos);
+		if (!Collected(item, docs, photos)) {
+			return;
+		}
 	}
 	if (docs.empty() && photos.empty()) {
 		return;
 	}
-       std::sort(docs.begin(), docs.end(), [](const auto &a, const auto &b) {
-               return a.second < b.second;
-       });
-       std::sort(photos.begin(), photos.end(), [](const auto &a, const auto &b) {
-               return a.second < b.second;
-       });
+	std::sort(docs.begin(), docs.end(), [](const auto &a, const auto &b) {
+		return a.second < b.second;
+	});
+	std::sort(photos.begin(), photos.end(), [](const auto &a, const auto &b) {
+		return a.second < b.second;
+	});
 	const auto done = [weak = base::make_weak(list)] {
 		if (const auto strong = weak.get()) {
 			strong->cancelSelection();
@@ -388,18 +394,19 @@ void AddDownloadFilesAction(
 	auto docs = Documents();
 	auto photos = Photos();
 	for (const auto &item : items) {
-		Added(item, docs, photos);
+		if (!Collected(item, docs, photos)) {
+			return;
+		}
 	}
-	
 	if (docs.empty() && photos.empty()) {
 		return;
 	}
-       std::sort(docs.begin(), docs.end(), [](const auto &a, const auto &b) {
-               return a.second < b.second;
-       });
-       std::sort(photos.begin(), photos.end(), [](const auto &a, const auto &b) {
-               return a.second < b.second;
-       });
+	std::sort(docs.begin(), docs.end(), [](const auto &a, const auto &b) {
+		return a.second < b.second;
+	});
+	std::sort(photos.begin(), photos.end(), [](const auto &a, const auto &b) {
+		return a.second < b.second;
+	});
 	const auto done = [weak = base::make_weak(list)] {
 		if (const auto strong = weak.get()) {
 			strong->clearSelected();
