@@ -176,7 +176,6 @@ void BuildDonations(SectionBuilder &builder) {
 }
 
 void BuildCrashReporting(SectionBuilder &builder, AyuSectionBuilder &ayu) {
-#ifndef TDESKTOP_DISABLE_AUTOUPDATE
 	builder.addSkip();
 	builder.addSubsectionTitle(tr::ayu_CategoryOther());
 
@@ -190,7 +189,6 @@ void BuildCrashReporting(SectionBuilder &builder, AyuSectionBuilder &ayu) {
 	});
 	builder.addSkip();
 	builder.addDividerText(tr::ayu_CrashReportingDescription());
-#endif
 }
 
 void BuildOtherThings(SectionBuilder &builder) {
