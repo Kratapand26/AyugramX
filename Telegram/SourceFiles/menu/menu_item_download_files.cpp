@@ -92,26 +92,22 @@ using Photos = std::vector<std::pair<not_null<PhotoData*>, FullMsgId>>;
 	return QString("%1- %2").arg(number).arg(name);
 }
 
-[[nodiscard]] bool Collected(
+void CollectDownloadable(
 		HistoryItem *item,
 		Documents &documents,
 		Photos &photos) {
-	if (!item) {
-		return false;
-	} else if (item->forbidsSaving()) {
-		return true;
-	} else if (const auto media = item->media()) {
+	if (!item || item->forbidsSaving()) {
+		return;
+	}
+	if (const auto media = item->media()) {
 		if (const auto photo = media->photo()) {
 			photos.emplace_back(photo, item->fullId());
-			return true;
 		} else if (const auto document = media->document()) {
 			if (!item->topicRootId() || !document->sticker()) {
 				documents.emplace_back(document, item->fullId());
 			}
-			return true;
 		}
 	}
-	return false;
 }
 
 void AddAction(
@@ -362,7 +358,7 @@ void AddDownloadFilesAction(
 	for (const auto &selectedItem : selectedItems) {
 		const auto &id = selectedItem.msgId;
 		const auto item = window->session().data().message(id);
-		Collected(item, docs, photos);
+		CollectDownloadable(item, docs, photos);
 	}
 	if (docs.empty() && photos.empty()) {
 		return;
@@ -392,7 +388,7 @@ void AddDownloadFilesAction(
 	auto docs = Documents();
 	auto photos = Photos();
 	for (const auto &item : items) {
-		Collected(item, docs, photos);
+		CollectDownloadable(item, docs, photos);
 	}
 	if (docs.empty() && photos.empty()) {
 		return;
