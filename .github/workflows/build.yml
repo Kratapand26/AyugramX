@@ -258,7 +258,6 @@ jobs:
           $dst = "AyuGram-Windows\"
           New-Item -ItemType Directory -Force $dst | Out-Null
           Copy-Item "out\Release\AyuGram.exe" $dst
-          Copy-Item "out\Release\Updater.exe" $dst -ErrorAction SilentlyContinue
  
           $dstPdb = "AyuGram-Windows-Debug\"
           New-Item -ItemType Directory -Force $dstPdb | Out-Null
