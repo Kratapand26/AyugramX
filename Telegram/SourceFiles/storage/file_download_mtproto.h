@@ -56,7 +56,6 @@ public:
 	uint64 objId() const override;
 	int64 totalSize() const override;
 
-
 private:
 	Storage::Cache::Key cacheKey() const override;
 	std::optional<MediaKey> fileLocationKey() const override;

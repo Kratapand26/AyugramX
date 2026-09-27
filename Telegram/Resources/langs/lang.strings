@@ -9176,5 +9176,4 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "ayu_BoostUploadSpeed" = "Boost Upload Speed";
 "ayu_BoostUploadSpeed_about" = "Upload photos, videos, and files using parallel connections and optimized chunks for maximum speed.";
 "ayu_BoostDownloadSpeed" = "Boost Download Speed";
-"ayu_BoostDownloadSpeed_about" = "Download photos, videos, and files using parallel connections and maximized pipeline window.";
-
+"ayu_BoostDownloadSpeed_about" = "Ramp up parallel connections sooner when downloading large files.";

@@ -24,8 +24,6 @@ namespace Storage {
 // and then we get a CDN-redirect where we support only
 // fixed part size download for hash checking.
 constexpr auto kDownloadPartSize = 128 * 1024;
-constexpr auto kMinBoostFileSize = 10 * 1024 * 1024;
-
 
 class DownloadMtprotoTask;
 
@@ -77,7 +75,6 @@ private:
 		[[nodiscard]] bool hasLargeTask(int64 threshold) const;
 		void removeSession(int index);
 
-
 	private:
 		struct Enqueued {
 			not_null<Task*> task;
@@ -102,11 +99,13 @@ private:
 		int sessionRemoveTimes = 0;
 		int timeouts = 0; // Since all sessions had successes >= required.
 		int totalRequested = 0;
+		bool resetSessionsOnIdle = false;
 	};
 
 	void checkSendNext();
 	void checkSendNext(MTP::DcId dcId, Queue &queue);
 	bool trySendNextPart(MTP::DcId dcId, Queue &queue);
+	void trimIdleSessions(MTP::DcId dcId, DcBalanceData &dc);
 
 	void killSessionsSchedule(MTP::DcId dcId);
 	void killSessionsCancel(MTP::DcId dcId);
@@ -157,12 +156,9 @@ public:
 	[[nodiscard]] Data::FileOrigin fileOrigin() const;
 	[[nodiscard]] uint64 objectId() const;
 	[[nodiscard]] const Location &location() const;
-	[[nodiscard]] virtual int64 totalSize() const {
-		return 0;
-	}
+	[[nodiscard]] virtual int64 totalSize() const = 0;
 
 	[[nodiscard]] virtual bool readyToRequest() const = 0;
-
 	void loadPart(int sessionIndex);
 	void removeSession(int sessionIndex);
 

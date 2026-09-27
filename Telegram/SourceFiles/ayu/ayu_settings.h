@@ -383,7 +383,6 @@ public:
 	[[nodiscard]] bool boostUploadSpeed() const { return _boostUploadSpeed.current(); }
 	[[nodiscard]] bool boostDownloadSpeed() const { return _boostDownloadSpeed.current(); }
 
-
 	// AyuGram: Local folder tags for non-premium users
 	[[nodiscard]] bool localFolderTagsEnabled(uint64 userId) const;
 	void setLocalFolderTagsEnabled(uint64 userId, bool val);
@@ -491,7 +490,6 @@ public:
 	void setSendWebpAsDocument(bool val);
 	void setBoostUploadSpeed(bool val);
 	void setBoostDownloadSpeed(bool val);
-
 
 	[[nodiscard]] rpl::producer<bool> useGlobalGhostModeValue() const { return _useGlobalGhostMode.value(); }
 	[[nodiscard]] rpl::producer<bool> useGlobalGhostModeChanges() const { return _useGlobalGhostMode.changes(); }
@@ -674,7 +672,6 @@ public:
 	[[nodiscard]] rpl::producer<bool> boostDownloadSpeedValue() const { return _boostDownloadSpeed.value(); }
 	[[nodiscard]] rpl::producer<bool> boostDownloadSpeedChanges() const { return _boostDownloadSpeed.changes(); }
 
-
 	friend void to_json(nlohmann::json &j, const AyuSettings &s);
 	friend void from_json(const nlohmann::json &j, AyuSettings &s);
 
@@ -773,8 +770,6 @@ private:
 	rpl::variable<bool> _sendWebpAsDocument = true;
 	rpl::variable<bool> _boostUploadSpeed = true;
 	rpl::variable<bool> _boostDownloadSpeed = false;
-
-
 
 	rpl::variable<bool> _useGlobalGhostMode = true;
 	std::map<uint64, std::unique_ptr<GhostModeAccountSettings>> _ghostAccounts;

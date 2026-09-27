@@ -7,21 +7,21 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "storage/download_manager_mtproto.h"
 
+#include "apiwrap.h"
+#include "ayu/ayu_settings.h"
+#include "base/openssl_help.h"
+#include "data/data_document.h"
+#include "data/data_session.h"
+#include "main/main_session.h"
 #include "mtproto/facade.h"
 #include "mtproto/mtproto_auth_key.h"
 #include "mtproto/mtproto_response.h"
-#include "main/main_session.h"
-#include "data/data_session.h"
-#include "data/data_document.h"
-#include "apiwrap.h"
-#include "base/openssl_help.h"
-#include "ayu/ayu_settings.h"
-
 
 namespace Storage {
 namespace {
 
 constexpr auto kKillSessionTimeout = 15 * crl::time(1000);
+constexpr auto kMinBoostFileSize = 10 * 1024 * 1024;
 constexpr auto kStartWaitedInSession = 4 * kDownloadPartSize;
 constexpr auto kMaxWaitedInSession = 16 * kDownloadPartSize;
 constexpr auto kStartSessionsCount = 1;
@@ -125,8 +125,6 @@ DownloadManagerMtproto::DcBalanceData::DcBalanceData()
 : sessions(kStartSessionsCount) {
 }
 
-
-
 DownloadManagerMtproto::DownloadManagerMtproto(not_null<ApiWrap*> api)
 : _api(api)
 , _resetGenerationTimer([=] { resetGeneration(); })
@@ -138,6 +136,14 @@ DownloadManagerMtproto::DownloadManagerMtproto(not_null<ApiWrap*> api)
 		sessionTimedOut(
 			MTP::BareDcId(shiftedDcId),
 			MTP::GetDcIdShift(shiftedDcId));
+	}, _lifetime);
+
+	AyuSettings::getInstance().boostDownloadSpeedChanges(
+	) | rpl::on_next([=](bool boosted) {
+		for (auto &[dcId, balanceData] : _balanceData) {
+			balanceData.resetSessionsOnIdle = !boosted;
+			trimIdleSessions(dcId, balanceData);
+		}
 	}, _lifetime);
 }
 
@@ -188,11 +194,9 @@ void DownloadManagerMtproto::checkSendNextAfterSuccess(MTP::DcId dcId) {
 }
 
 bool DownloadManagerMtproto::trySendNextPart(MTP::DcId dcId, Queue &queue) {
-	const auto &balanceData = _balanceData[dcId];
+	auto &balanceData = _balanceData[dcId];
+	trimIdleSessions(dcId, balanceData);
 	const auto &sessions = balanceData.sessions;
-
-
-
 	const auto bestIndex = [&] {
 		const auto proj = [](const DcSessionBalanceData &data) {
 			return (data.requested < data.maxWaitedAmount)
@@ -213,6 +217,19 @@ bool DownloadManagerMtproto::trySendNextPart(MTP::DcId dcId, Queue &queue) {
 		return true;
 	}
 	return false;
+}
+
+void DownloadManagerMtproto::trimIdleSessions(
+		MTP::DcId dcId,
+		DcBalanceData &dc) {
+	if (!dc.resetSessionsOnIdle || dc.totalRequested != 0) {
+		return;
+	}
+	for (auto j = kStartSessionsCount; j < int(dc.sessions.size()); ++j) {
+		api().instance().stopSession(MTP::downloadDcId(dcId, j));
+	}
+	dc.sessions.resize(kStartSessionsCount);
+	dc.resetSessionsOnIdle = false;
 }
 
 int DownloadManagerMtproto::changeRequestedAmount(
@@ -420,15 +437,22 @@ void DownloadManagerMtproto::killSessions(MTP::DcId dcId) {
 	if (i != end(_balanceData)) {
 		auto &dc = i->second;
 		Assert(dc.totalRequested == 0);
-		for (auto j = 0; j != int(dc.sessions.size()); ++j) {
-			Assert(dc.sessions[j].requested == 0);
+		const auto resetSessions = dc.resetSessionsOnIdle;
+		auto sessions = base::take(dc.sessions);
+		dc = DcBalanceData();
+		for (auto j = 0; j != int(sessions.size()); ++j) {
+			Assert(sessions[j].requested == 0);
+			sessions[j] = DcSessionBalanceData();
 			api().instance().stopSession(MTP::downloadDcId(dcId, j));
 		}
-		dc = DcBalanceData();
+		if (!AyuSettings::getInstance().boostDownloadSpeed()) {
+			if (resetSessions) {
+				sessions.resize(kStartSessionsCount);
+			}
+			dc.sessions = base::take(sessions);
+		}
 	}
 }
-
-
 
 DownloadMtprotoTask::DownloadMtprotoTask(
 	not_null<DownloadManagerMtproto*> owner,
