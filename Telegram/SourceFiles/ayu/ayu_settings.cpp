@@ -13,8 +13,12 @@
 #include "ayu/features/streamer_mode/streamer_mode.h"
 #include "ayu/ui/ayu_logo.h"
 #include "core/application.h"
+#include "data/data_chat_filters.h"
+#include "data/data_session.h"
+#include "dialogs/dialogs_common.h"
 #include "features/filters/filters_cache_controller.h"
 #include "features/translator/ayu_translator.h"
+#include "main/main_account.h"
 #include "main/main_domain.h"
 #include "main/main_session.h"
 #include "platform/platform_translate_provider.h"
@@ -429,6 +433,16 @@ void AyuSettings::save() {
 void AyuSettings::reset() {
 	getInstance() = AyuSettings();
 	save();
+	for (const auto &account : Core::App().domain().accounts()) {
+		if (const auto session = account.account->maybeSession()) {
+			auto &filters = session->data().chatsFilters();
+			for (const auto &filter : filters.list()) {
+				filters.setFolderSortOrder(
+					filter.id(),
+					Dialogs::FolderSortOrder::Default);
+			}
+		}
+	}
 }
 
 GhostModeAccountSettings &AyuSettings::ghost(not_null<Main::Session*> session) {
@@ -1137,6 +1151,40 @@ void AyuSettings::setCustomFolderIcon(uint64 userId, int filterId, std::optional
 	save();
 }
 
+Dialogs::FolderSortOrder AyuSettings::folderSortOrder(
+		uint64 userId,
+		int filterId) const {
+	const auto account = _folderSortOrders.find(userId);
+	if (account != _folderSortOrders.end()) {
+		const auto folder = account->second.find(filterId);
+		if (folder != account->second.end()) {
+			return folder->second;
+		}
+	}
+	return Dialogs::FolderSortOrder::Default;
+}
+
+void AyuSettings::setFolderSortOrder(
+		uint64 userId,
+		int filterId,
+		Dialogs::FolderSortOrder order) {
+	if (folderSortOrder(userId, filterId) == order) {
+		return;
+	}
+	if (order == Dialogs::FolderSortOrder::Default) {
+		const auto account = _folderSortOrders.find(userId);
+		if (account != _folderSortOrders.end()) {
+			account->second.erase(filterId);
+			if (account->second.empty()) {
+				_folderSortOrders.erase(account);
+			}
+		}
+	} else {
+		_folderSortOrders[userId][filterId] = order;
+	}
+	save();
+}
+
 bool AyuSettings::localFolderPresetEnabled(uint64 userId, LocalFolderPreset preset) const {
 	const auto it = _localFolders.find(userId);
 	return (it != _localFolders.end())
@@ -1322,6 +1370,19 @@ void to_json(nlohmann::json &j, const AyuSettings &s) {
 	}
 	j["localFolderTags"] = folderTags;
 
+	auto folderSortOrders = nlohmann::json::object();
+	for (const auto &[userId, folders] : s._folderSortOrders) {
+		auto orders = nlohmann::json::object();
+		for (const auto &[filterId, order] : folders) {
+			const auto name = (order == Dialogs::FolderSortOrder::UnreadAscending)
+				? "unread_ascending"
+				: "unread_descending";
+			orders[std::to_string(filterId)] = name;
+		}
+		folderSortOrders[std::to_string(userId)] = std::move(orders);
+	}
+	j["folderSortOrders"] = std::move(folderSortOrders);
+
 	// AyuGram: Serialize local folders
 	auto localFoldersJson = nlohmann::json::object();
 	for (const auto &[userId, uFolders] : s._localFolders) {
@@ -1489,6 +1550,36 @@ void from_json(const nlohmann::json &j, AyuSettings &s) {
 				}
 			}
 			s._localFolderTags[std::stoull(key)] = std::move(tagSettings);
+		}
+	}
+
+	s._folderSortOrders.clear();
+	const auto folderSortOrders = j.find("folderSortOrders");
+	if (folderSortOrders != j.end() && folderSortOrders->is_object()) {
+		for (const auto &[userKey, folders] : folderSortOrders->items()) {
+			auto validUser = false;
+			const auto userId = QString::fromStdString(userKey).toULongLong(
+				&validUser);
+			if (!validUser || !userId || !folders.is_object()) {
+				continue;
+			}
+			for (const auto &[folderKey, value] : folders.items()) {
+				auto validFolder = false;
+				const auto filterId = QString::fromStdString(folderKey).toInt(
+					&validFolder);
+				if (!validFolder || filterId <= 0 || !value.is_string()) {
+					continue;
+				}
+				using Order = Dialogs::FolderSortOrder;
+				const auto order = (value == "unread_ascending")
+					? Order::UnreadAscending
+					: (value == "unread_descending")
+					? Order::UnreadDescending
+					: Order::Default;
+				if (order != Order::Default) {
+					s._folderSortOrders[userId][filterId] = order;
+				}
+			}
 		}
 	}
 

@@ -495,8 +495,39 @@ not_null<Dialogs::MainList*> ChatFilters::chatsList(FilterId filterId) {
 			&_owner->session(),
 			filterId,
 			_owner->maxPinnedChatsLimitValue(filterId));
+		pointer->indexed()->setFolderSortOrder(folderSortOrder(filterId));
 	}
 	return pointer.get();
+}
+
+Dialogs::FolderSortOrder ChatFilters::folderSortOrder(FilterId id) const {
+	return AyuSettings::getInstance().folderSortOrder(
+		_owner->session().userId().bare,
+		id);
+}
+
+void ChatFilters::setFolderSortOrder(
+		FilterId id,
+		Dialogs::FolderSortOrder order) {
+	if (!id
+		|| !ranges::contains(_list, id, &ChatFilter::id)) {
+		return;
+	}
+	const auto list = chatsList(id)->indexed();
+	if (folderSortOrder(id) == order
+		&& list->all().folderSortOrder() == order) {
+		return;
+	}
+	AyuSettings::getInstance().setFolderSortOrder(
+		_owner->session().userId().bare,
+		id,
+		order);
+	list->setFolderSortOrder(order);
+	_folderSortOrderChanges.fire_copy(id);
+}
+
+rpl::producer<FilterId> ChatFilters::folderSortOrderChanges() const {
+	return _folderSortOrderChanges.events();
 }
 
 void ChatFilters::clear() {
@@ -1213,9 +1244,18 @@ void ChatFilters::applyRemove(int position) {
 		const auto userId = _owner->session().userId().bare;
 		settings.setCustomFolderColor(userId, filter.id(), std::nullopt);
 		settings.setCustomFolderIcon(userId, filter.id(), std::nullopt);
+		settings.setFolderSortOrder(
+			userId,
+			filter.id(),
+			Dialogs::FolderSortOrder::Default);
 	}
 
 	applyChange(filter, ChatFilter(filter.id(), {}, {}, {}, {}, {}, {}, {}));
+	const auto chats = _chatsLists.find(filter.id());
+	if (chats != _chatsLists.end()) {
+		chats->second->indexed()->setFolderSortOrder(
+			Dialogs::FolderSortOrder::Default);
+	}
 }
 
 bool ChatFilters::applyChange(ChatFilter &filter, ChatFilter &&updated) {

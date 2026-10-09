@@ -18,6 +18,10 @@
 #include <optional>
 #include <QtCore/QString>
 
+namespace Dialogs {
+enum class FolderSortOrder;
+} // namespace Dialogs
+
 enum class LocalFolderPreset {
 	Users = 1,
 	Groups = 2,
@@ -390,6 +394,13 @@ public:
 	void setCustomFolderColor(uint64 userId, int filterId, std::optional<int> colorIndex);
 	[[nodiscard]] std::optional<QString> customFolderIcon(uint64 userId, int filterId) const;
 	void setCustomFolderIcon(uint64 userId, int filterId, std::optional<QString> iconEmoji);
+	[[nodiscard]] Dialogs::FolderSortOrder folderSortOrder(
+		uint64 userId,
+		int filterId) const;
+	void setFolderSortOrder(
+		uint64 userId,
+		int filterId,
+		Dialogs::FolderSortOrder order);
 
 	// AyuGram: Local Folders
 	[[nodiscard]] bool localFolderPresetEnabled(uint64 userId, LocalFolderPreset preset) const;
@@ -783,6 +794,7 @@ private:
 		std::map<int, QString> icons; // filterId -> iconEmoji
 	};
 	std::map<uint64, LocalFolderTagSettings> _localFolderTags;
+	std::map<uint64, std::map<int, Dialogs::FolderSortOrder>> _folderSortOrders;
 
 	// AyuGram: Per-account local folders settings
 	struct UserLocalFolders {

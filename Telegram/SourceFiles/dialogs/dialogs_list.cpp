@@ -24,6 +24,30 @@ List::const_iterator List::cfind(Row *value) const {
 		: cend();
 }
 
+List::SortKey List::sortKey(not_null<Row*> row) const {
+	const auto byDate = row->sortKey(_filterId);
+	if (_folderSortOrder == FolderSortOrder::Default
+		|| row->entry()->fixedOnTopIndex()
+		|| row->entry()->isPinnedDialog(_filterId)) {
+		return { true, 0, byDate };
+	}
+	const auto unread = std::max(row->entry()->chatListUnreadState().messages, 0);
+	return {
+		false,
+		(_folderSortOrder == FolderSortOrder::UnreadAscending) ? -unread : unread,
+		byDate,
+	};
+}
+
+void List::setFolderSortOrder(FolderSortOrder order) {
+	Expects(_sortMode == SortMode::Date);
+
+	if (_folderSortOrder != order) {
+		_folderSortOrder = order;
+		sortByDate();
+	}
+}
+
 not_null<Row*> List::addToEnd(Key key) {
 	if (const auto result = getRow(key)) {
 		return result;
@@ -95,25 +119,25 @@ void List::adjustByDate(not_null<Row*> row) {
 		}
 	}
 
-	const auto key = row->sortKey(_filterId);
+	const auto key = sortKey(row);
 	const auto index = row->index();
 	const auto i = _rows.begin() + index;
-	if (i + 1 != _rows.end() && (*(i + 1))->sortKey(_filterId) > key) {
+	if (i + 1 != _rows.end() && sortKey(*(i + 1)) > key) {
 		const auto before = std::lower_bound(
 			i + 2,
 			_rows.end(),
 			key,
-			[&](not_null<Row*> row, uint64 key) {
-				return (row->sortKey(_filterId) > key);
+			[&](not_null<Row*> row, const SortKey &key) {
+				return (sortKey(row) > key);
 			});
 		rotate(i, i + 1, before);
-	} else if (i != _rows.begin() && (*(i - 1))->sortKey(_filterId) < key) {
+	} else if (i != _rows.begin() && sortKey(*(i - 1)) < key) {
 		const auto after = std::lower_bound(
 			_rows.begin(),
 			i - 1,
 			key,
-			[&](not_null<Row*> row, uint64 key) {
-				return (row->sortKey(_filterId) >= key);
+			[&](not_null<Row*> row, const SortKey &key) {
+				return (sortKey(row) >= key);
 			});
 		rotate(after, i, i + 1);
 	}
@@ -144,7 +168,7 @@ bool List::sortedByDate() const {
 	Expects(_sortMode == SortMode::Date);
 
 	for (auto i = 1, count = int(_rows.size()); i != count; ++i) {
-		if (_rows[i - 1]->sortKey(_filterId) < _rows[i]->sortKey(_filterId)) {
+		if (sortKey(_rows[i - 1]) < sortKey(_rows[i])) {
 			return false;
 		}
 	}
@@ -155,7 +179,7 @@ void List::sortByDate() {
 	Expects(_sortMode == SortMode::Date);
 
 	ranges::stable_sort(_rows, [&](Row *a, Row *b) {
-		return a->sortKey(_filterId) > b->sortKey(_filterId);
+		return sortKey(a) > sortKey(b);
 	});
 	auto top = 0;
 	for (auto i = 0, count = int(_rows.size()); i != count; ++i) {

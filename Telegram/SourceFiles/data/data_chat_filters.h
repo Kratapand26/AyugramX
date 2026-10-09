@@ -13,6 +13,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 class History;
 
 namespace Dialogs {
+enum class FolderSortOrder;
 class MainList;
 class Key;
 } // namespace Dialogs
@@ -203,6 +204,9 @@ public:
 	void refreshHistory(not_null<History*> history);
 
 	[[nodiscard]] not_null<Dialogs::MainList*> chatsList(FilterId filterId);
+	[[nodiscard]] Dialogs::FolderSortOrder folderSortOrder(FilterId id) const;
+	void setFolderSortOrder(FilterId id, Dialogs::FolderSortOrder order);
+	[[nodiscard]] rpl::producer<FilterId> folderSortOrderChanges() const;
 	void clear();
 
 	const ChatFilter &applyUpdatedPinned(
@@ -277,6 +281,7 @@ private:
 	std::vector<ChatFilter> _list;
 	base::flat_map<FilterId, std::unique_ptr<Dialogs::MainList>> _chatsLists;
 	rpl::event_stream<> _listChanged;
+	rpl::event_stream<FilterId> _folderSortOrderChanges;
 	rpl::event_stream<FilterId> _isChatlistChanged;
 	rpl::event_stream<TagColorChanged> _tagColorChanged;
 	mtpRequestId _loadRequestId = 0;

@@ -9,10 +9,13 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 #include "dialogs/dialogs_row.h"
 
+#include <tuple>
+
 class PeerData;
 namespace Dialogs {
 
 enum class SortMode;
+enum class FolderSortOrder;
 
 class List final {
 public:
@@ -60,6 +63,10 @@ public:
 	bool updateHeights(float64 narrowRatio);
 	bool remove(Key key, Row *replacedBy = nullptr);
 	void sortByDate();
+	void setFolderSortOrder(FolderSortOrder order);
+	[[nodiscard]] FolderSortOrder folderSortOrder() const {
+		return _folderSortOrder;
+	}
 	[[nodiscard]] uint64 dateOrderVersion() const {
 		return _dateOrderVersion;
 	}
@@ -84,6 +91,9 @@ public:
 	[[nodiscard]] iterator findByY(int y) const;
 
 private:
+	using SortKey = std::tuple<bool, int, uint64>;
+
+	[[nodiscard]] SortKey sortKey(not_null<Row*> row) const;
 	void adjustByName(not_null<Row*> row);
 	[[nodiscard]] bool sortedByDate() const;
 	void rotate(
@@ -95,6 +105,7 @@ private:
 	FilterId _filterId = 0;
 	uint64 _dateOrderVersion = 0;
 	float64 _narrowRatio = 0.;
+	FolderSortOrder _folderSortOrder = FolderSortOrder();
 	bool _frozen = false;
 	std::vector<not_null<Row*>> _rows;
 	std::map<Key, std::unique_ptr<Row>> _rowByKey;

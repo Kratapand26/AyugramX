@@ -7818,6 +7818,10 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "lng_filters_icon_header" = "Choose an icon";
 "lng_filters_context_edit" = "Edit folder";
 "lng_filters_context_remove" = "Remove";
+"lng_filters_context_sort" = "Sort chats";
+"lng_filters_sort_default" = "Default order";
+"lng_filters_sort_unread_descending" = "Most unread first";
+"lng_filters_sort_unread_ascending" = "Fewest unread first";
 "lng_filters_remove_sure" = "This will remove the folder, your chats will not be deleted.";
 "lng_filters_remove_yes" = "Remove";
 "lng_filters_menu_add" = "Add to folder";

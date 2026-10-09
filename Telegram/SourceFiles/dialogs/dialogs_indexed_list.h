@@ -23,6 +23,7 @@ public:
 	RowsByLetter addToEnd(Key key);
 	Row *addByName(Key key);
 	void adjustByDate(const RowsByLetter &links);
+	void setFolderSortOrder(FolderSortOrder order);
 	void moveToTop(Key key);
 	void freeze();
 	void unfreeze();

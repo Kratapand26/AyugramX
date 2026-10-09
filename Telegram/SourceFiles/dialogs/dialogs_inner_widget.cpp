@@ -402,6 +402,15 @@ InnerWidget::InnerWidget(
 
 	Ui::ScheduleThanosEffectWarmUp(&session(), lifetime());
 
+	session().data().chatsFilters().folderSortOrderChanges(
+	) | rpl::filter([=](FilterId id) {
+		return id == _filterId;
+	}) | rpl::on_next([=] {
+		clearSelection();
+		clearPressed();
+		refresh();
+	}, lifetime());
+
 	rpl::merge(
 		session().settings().archiveCollapsedChanges() | rpl::map_to(false),
 		session().data().chatsFilters().changed() | rpl::map_to(true),

@@ -21,6 +21,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "data/data_unread_value.h"
 #include "data/data_user.h"
 #include "lang/lang_keys.h"
+#include "menu/menu_folder_sort.h"
 #include "menu/menu_mark_as_read.h"
 #include "main/main_session.h"
 #include "settings/sections/settings_folders.h"
@@ -95,6 +96,7 @@ void ShowMenu(
 			MarkAsReadMenu::ChatListKind::Folder,
 			[=] { return session->data().chatsFilters().chatsList(id); },
 			addAction);
+		FolderSortMenu::AddAction(session, id, addAction);
 
 		auto showRemoveBox = [=] {
 			state->removeApi.request(base::make_weak(parent), controller, id);

@@ -58,6 +58,13 @@ void IndexedList::adjustByDate(const RowsByLetter &links) {
 	++_dateVersion;
 }
 
+void IndexedList::setFolderSortOrder(FolderSortOrder order) {
+	if (_list.folderSortOrder() != order) {
+		_list.setFolderSortOrder(order);
+		++_dateVersion;
+	}
+}
+
 bool IndexedList::updateHeights(float64 narrowRatio) {
 	return _list.updateHeights(narrowRatio);
 }
@@ -225,7 +232,11 @@ const List *IndexedList::filtered(QChar ch) const {
 	auto &list = i->second;
 	if (_sortMode == SortMode::Date
 		&& list.dateOrderVersion() != _dateVersion) {
-		list.sortByDate();
+		if (list.folderSortOrder() != _list.folderSortOrder()) {
+			list.setFolderSortOrder(_list.folderSortOrder());
+		} else {
+			list.sortByDate();
+		}
 		list.markDateOrderVersion(_dateVersion);
 	}
 	return &list;

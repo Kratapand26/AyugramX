@@ -276,11 +276,16 @@ void Entry::notifyUnreadStateChange(const UnreadState &wasState) {
 	const auto nowState = chatListUnreadState();
 	owner().chatsListFor(this)->unreadStateChanged(wasState, nowState);
 	auto &filters = owner().chatsFilters();
+	auto refreshUnreadOrder = false;
 	for (const auto &[filterId, links] : _chatListLinks) {
 		if (filterId) {
-			filters.chatsList(filterId)->unreadStateChanged(
+			const auto list = filters.chatsList(filterId);
+			list->unreadStateChanged(
 				wasState,
 				nowState);
+			refreshUnreadOrder |= (wasState.messages != nowState.messages)
+				&& (list->indexed()->all().folderSortOrder()
+					!= FolderSortOrder::Default);
 		}
 	}
 	if (const auto history = asHistory()) {
@@ -324,6 +329,8 @@ void Entry::notifyUnreadStateChange(const UnreadState &wasState) {
 	}
 	if (owner().dialogsUnreadOnTop()) {
 		updateChatListSortPosition();
+	} else if (refreshUnreadOrder) {
+		owner().refreshChatListEntry(this);
 	}
 	updateChatListEntryPostponed();
 }

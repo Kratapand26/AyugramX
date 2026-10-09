@@ -7,6 +7,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "window/window_filters_menu.h"
 
+#include "menu/menu_folder_sort.h"
 #include "menu/menu_mark_as_read.h"
 #include "mainwindow.h"
 #include "window/window_session_controller.h"
@@ -796,6 +797,7 @@ void FiltersMenu::showMenu(QPoint position, FilterId id) {
 			MarkAsReadMenu::ChatListKind::Folder,
 			std::move(filteredChats),
 			addAction);
+		FolderSortMenu::AddAction(&_session->session(), id, addAction);
 
 		addAction({
 			.text = tr::lng_filters_context_remove(tr::now),
