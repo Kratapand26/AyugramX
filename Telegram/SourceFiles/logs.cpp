@@ -92,6 +92,8 @@ public:
 		}
 	}
 
+	void removeStartLog();
+
 	bool instanceChecked() {
 		return reopen(LogDataMain, 0, QString());
 	}
@@ -260,6 +262,16 @@ NEW LOGGING INSTANCE STARTED!!!\n\
 	}
 
 };
+
+void LogsDataFields::removeStartLog() {
+	QMutexLocker lock(_logsMutex(LogDataMain));
+	WritingEntryScope scope;
+
+	auto &file = files[LogDataMain];
+	if (file && file->isOpen() && file->remove()) {
+		file.reset();
+	}
+}
 
 LogsDataFields *LogsData = 0;
 
@@ -496,6 +508,12 @@ void closeMain() {
 	LOG(("Explicitly closing main log and finishing crash handlers."));
 	if (LogsData) {
 		LogsData->closeMain();
+	}
+}
+
+void RemoveStartLog() {
+	if (!DebugEnabled() && LogsData && LogsStartIndexChosen >= 0) {
+		LogsData->removeStartLog();
 	}
 }
 

@@ -457,6 +457,7 @@ void Sandbox::socketReading() {
 		"activating and quitting..."
 		).arg(processId
 		).arg(windowId));
+	Logs::RemoveStartLog();
 	return Quit();
 }
 

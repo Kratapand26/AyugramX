@@ -25,6 +25,7 @@ bool instanceChecked();
 void multipleInstances();
 
 void closeMain();
+void RemoveStartLog();
 
 void writeMain(const QString &v);
 void writeDebug(const QString &v);
