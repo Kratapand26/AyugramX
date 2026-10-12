@@ -445,6 +445,11 @@ bool UiIntegration::handleUrlClick(
 		}
 	}
 
+	if (AyuUrlHandlers::IsUnsafeExternalUrl(url)) {
+		LOG(("AyuGram: Blocked opening unsafe url: %1").arg(url));
+		return true;
+	}
+
 	if (AyuUrlHandlers::TryHandleSpotify(url)) {
 		return true;
 	}
@@ -479,6 +484,12 @@ bool UiIntegration::copyPreOnClick(const QVariant &context) {
 
 rpl::producer<> UiIntegration::forcePopupMenuHideRequests() {
 	return Core::App().passcodeLockChanges() | rpl::to_empty;
+}
+
+void UiIntegration::preparePopupMenu(not_null<QWidget*> widget) {
+	if (AyuSettings::getInstance().streamerMode()) {
+		AyuFeatures::StreamerMode::hideWidgetWindow(widget);
+	}
 }
 
 const Ui::Emoji::One *UiIntegration::defaultEmojiVariant(

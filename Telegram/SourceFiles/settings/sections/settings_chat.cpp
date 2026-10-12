@@ -2541,6 +2541,7 @@ void SetupDefaultThemes(
 			updateMessageShotPalette(scheme->path);
 			return;
 		}
+
 		const auto scheme = ranges::find(
 			kSchemesList,
 			type,

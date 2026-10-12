@@ -8,7 +8,7 @@ add_library(td_ui OBJECT)
 init_non_host_target(td_ui)
 add_library(tdesktop::td_ui ALIAS td_ui)
 
-include(lib_ui/cmake/generate_styles.cmake)
+include(${ayu_lib_ui_source}/cmake/generate_styles.cmake)
 include(cmake/generate_numbers.cmake)
 
 set(ayugram_style_files
@@ -93,10 +93,10 @@ set(style_files
 )
 
 set(dependent_style_files
-    ${submodules_loc}/lib_ui/ui/colors.palette
-    ${submodules_loc}/lib_ui/ui/basic.style
-    ${submodules_loc}/lib_ui/ui/layers/layers.style
-    ${submodules_loc}/lib_ui/ui/widgets/widgets.style
+    ${ayu_lib_ui_source}/ui/colors.palette
+    ${ayu_lib_ui_source}/ui/basic.style
+    ${ayu_lib_ui_source}/ui/layers/layers.style
+    ${ayu_lib_ui_source}/ui/widgets/widgets.style
 )
 
 generate_styles(td_ui ${src_loc} "${style_files}" "${dependent_style_files}")

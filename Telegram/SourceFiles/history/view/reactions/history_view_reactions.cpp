@@ -637,7 +637,8 @@ void InlineList::paint(
 			p.setOpacity(1.);
 		}
 	}
-	if (!animations.empty() && context.reactionInfo && !AyuFeatures::MessageShot::isTakingShot()) {
+	if (!animations.empty() && context.reactionInfo
+		&& !AyuFeatures::MessageShot::isTakingShot()) {
 		const auto now = context.now;
 		context.reactionInfo->effectPaint = [
 			now,

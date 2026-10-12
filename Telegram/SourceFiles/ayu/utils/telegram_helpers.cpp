@@ -22,6 +22,7 @@
 #include "core/application.h"
 #include "base/unixtime.h"
 #include "core/mime_type.h"
+#include "data/components/ephemeral_messages.h"
 #include "data/data_channel.h"
 #include "data/data_chat.h"
 #include "data/data_document.h"
@@ -496,14 +497,6 @@ void markReadAfterAction(not_null<History*> history) {
 	if (const auto last = history->lastServerMessage()) {
 		readHistory(last);
 	}
-}
-
-QString formatTTL(int time, bool isDoc) {
-	if (time == 0x7FFFFFFF) {
-		return isDoc ? tr::ayu_OnePlayTTL(tr::now) : tr::ayu_OneViewTTL(tr::now);
-	}
-
-	return QString("%1s").arg(time);
 }
 
 QString getDCName(int dc) {
@@ -1224,10 +1217,13 @@ TextWithEntities reverseLocalPremiumEmoji(const TextWithEntities &text, not_null
 		if (entity.type() != EntityType::CustomEmoji) {
 			continue;
 		}
-		const auto shouldConvert = (!isForQuote
-			&& !history->peer->isSelf()
-			&& !premium
-			&& !emojiAllowed(entity));
+		const auto shouldConvert = entity.isLocal()
+			? (isForQuote
+				|| (!history->peer->isSelf() && !premium && !emojiAllowed(entity)))
+			: (!isForQuote
+				&& !history->peer->isSelf()
+				&& !premium
+				&& !emojiAllowed(entity));
 		if (shouldConvert) {
 			entity = EntityInText(
 				EntityType::CustomUrl,
@@ -1262,6 +1258,7 @@ void applyLocalPremiumEmoji(TextWithEntities &text) {
 							entity.offset(),
 							entity.length(),
 							emojiId);
+						entity.setLocal();
 					}
 				}
 			}
@@ -1614,6 +1611,9 @@ void applyGhostScheduling(
 		not_null<Main::Session*> session,
 		Api::SendOptions &options,
 		int delaySeconds) {
+	if (options.welcomeTemplate) {
+		return;
+	}
 	const auto &ghost = AyuSettings::ghost(session);
 	if (ghost.isUseScheduledMessages() && !options.scheduled) {
 		const auto delay = Core::App().settings().proxy().isEnabled()
@@ -1621,4 +1621,22 @@ void applyGhostScheduling(
 			: delaySeconds;
 		options.scheduled = base::unixtime::now() + delay;
 	}
+}
+
+void applyGhostScheduling(
+		Api::SendAction &action,
+		const QString &text,
+		int delaySeconds) {
+	const auto history = action.history;
+	const auto session = &history->session();
+	const auto replyTo = action.replyTo.messageId
+		? session->data().message(action.replyTo.messageId)
+		: nullptr;
+	if ((replyTo && replyTo->isEphemeral())
+		|| session->ephemeralMessages().hasEphemeralCommand(
+			history->peer,
+			text)) {
+		return;
+	}
+	applyGhostScheduling(session, action.options, delaySeconds);
 }

@@ -116,6 +116,7 @@ HANDOFF*
 # Temporary, patch & log files
 *.patch
 !/Telegram/cmake/ayu_lib_ui.patch
+!/Telegram/cmake/ayu_lib_ui_features.patch
 *.diff
 *.orig
 *.rej

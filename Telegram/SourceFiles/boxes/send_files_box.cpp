@@ -1274,13 +1274,7 @@ void SendFilesBox::addMenuButton() {
 		_menu = base::make_unique_q<Ui::PopupMenu>(top, tabbed.menu);
 		_menu->setForcedOrigin(Ui::PanelAnimation::Origin::TopRight);
 		const auto position = QCursor::pos();
-		const auto result = SendMenu::FillSendMenu(
-			_menu.get(),
-			_show,
-			_sendMenuDetails(),
-			_sendMenuCallback,
-			&_st.tabbed.icons,
-			position);
+
 		using ImageInfo = Ui::PreparedFileInformation::Image;
 		if (_list.files.size() == 1 && std::get_if<ImageInfo>(&_list.files[0].information->media)) {
 			_menu->addAction(
@@ -1313,6 +1307,14 @@ void SendFilesBox::addMenuButton() {
 				},
 				&st::menuIconStickers);
 		}
+
+		const auto result = SendMenu::FillSendMenu(
+			_menu.get(),
+			_show,
+			_sendMenuDetails(),
+			_sendMenuCallback,
+			&_st.tabbed.icons,
+			position);
 		if (result != SendMenu::FillMenuResult::Prepared) {
 			_menu = nullptr;
 			return true;
@@ -2678,15 +2680,16 @@ bool SendFilesBox::validateLength(const QString &text) const {
 void SendFilesBox::send(
 		Api::SendOptions options,
 		bool ctrlShiftEnter) {
+	const auto sumSize = ranges::accumulate(
+		_list.files, int64(0),
+		[](int64 sum, const auto &file) { return sum + file.size; });
+	applyGhostScheduling(&_show->session(), options, getScheduleTime(sumSize));
+
 	if (options.scheduled
 		&& ranges::any_of(_list.files, &Ui::PreparedFile::ttlSeconds)) {
 		showToast(tr::lng_ttl_no_schedule(tr::now));
 		return;
 	}
-	const auto sumSize = ranges::accumulate(
-		_list.files, int64(0),
-		[](int64 sum, const auto &file) { return sum + file.size; });
-	applyGhostScheduling(&_show->session(), options, getScheduleTime(sumSize));
 	if ((_sendType == Api::SendType::Scheduled
 		|| _sendType == Api::SendType::ScheduledToUser)
 		&& !options.scheduled) {

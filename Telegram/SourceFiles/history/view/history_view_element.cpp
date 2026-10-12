@@ -1637,6 +1637,7 @@ int Element::skipBlockWidth() const {
 	if (AyuFeatures::MessageShot::ignoreRender(AyuFeatures::MessageShot::RenderPart::Date)) {
 		return st::msgDateDelta.x();
 	}
+
 	return st::msgDateSpace + infoWidth() - st::msgDateDelta.x();
 }
 

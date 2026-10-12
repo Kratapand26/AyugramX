@@ -835,12 +835,9 @@ void Row::paintUserpic(
 		&& !(badgeUser && Data::IsUserOnline(badgeUser))
 		&& !subscribed
 		&& !insideCommunity;
-	// Only stories outline and online badge differ for active row.
-	const auto activeMatters = storiesCount
-		|| !(subscribed || communityMember);
 	if (keyChanged
 		|| !_cornerBadgeUserpic->layersManager.isFinished()
-		|| (activeMatters && _cornerBadgeUserpic->active != active)
+		|| activeChanged
 		|| _cornerBadgeUserpic->hidden != (hidden ? 1 : 0)
 		|| _cornerBadgeUserpic->frameIndex != frameIndex
 		|| _cornerBadgeUserpic->storiesCount != storiesCount
