@@ -53,6 +53,10 @@ void TTLButton::setVisible(bool visible) {
 	_button.setVisible(visible);
 }
 
+bool TTLButton::isHidden() const {
+	return _button.isHidden();
+}
+
 bool TTLButton::isVisible() const {
 	return _button.isVisible();
 }
