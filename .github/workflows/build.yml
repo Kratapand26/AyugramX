@@ -161,20 +161,20 @@ jobs:
           }
           Remove-Item $cacheFile -Force -ErrorAction SilentlyContinue
  
-      # ---- Build cache (STABLE name — only rotates on toolchain/flag changes) ----
+      # ---- Build cache (STABLE name — rotates on build compatibility changes) ----
       # NOTE: the build cache name must NOT depend on source content. The whole
       # point is to download the PREVIOUS run's .obj files and let ninja
       # incrementally rebuild only the files that changed. The key rotates only
-      # when something makes cached .obj files incompatible (toolset, Qt major,
-      # LTO flag, generator). Source edits are handled by ninja's own dep graph.
+      # when something makes cached .obj files incompatible (toolset, Qt,
+      # dependency ABI, LTO flag, generator). Source edits use ninja's dep graph.
  
       - name: Download Build Cache from Google Drive
         id: gdrive-cache
         shell: pwsh
         run: |
           $configPath = "$env:RUNNER_TEMP\rclone.conf"
-          # Stable across source edits; rotates only on toolchain/flag changes.
-          $cacheFile = "build_cache-msvc14.44-qt6-lto.zip"
+          # Stable across source edits; rotates on build compatibility changes.
+          $cacheFile = "build_cache-msvc14.44-qt6.11.2-731-lto.zip"
           Write-Host "Checking for build cache on Google Drive ($cacheFile)..."
           $exists = rclone --config $configPath lsf "gdrive:$cacheFile" 2>$null
           if ($LASTEXITCODE -eq 0 -and $exists) {
@@ -215,7 +215,7 @@ jobs:
  
       - name: Configure CMake
         env:
-          QT: 6.11.0
+          QT: 6.11.2
           LIBS_DIR: ${{ runner.workspace }}\Libraries\win64
           TDESKTOP_API_ID: ${{ secrets.TDESKTOP_API_ID }}
           TDESKTOP_API_HASH: ${{ secrets.TDESKTOP_API_HASH }}
@@ -268,7 +268,7 @@ jobs:
         shell: pwsh
         run: |
           $configPath = "$env:RUNNER_TEMP\rclone.conf"
-          $cacheFile = "build_cache-msvc14.44-qt6-lto.zip"
+          $cacheFile = "build_cache-msvc14.44-qt6.11.2-731-lto.zip"
           Write-Host "Compressing out/ directory (excluding binaries & debug symbols)..."
           7z a -tzip -mx=1 $cacheFile out\ "-xr!*.pdb" "-xr!*.ilk" "-xr!*.exe" -bsp1
           Write-Host "Pushing build cache to Google Drive ($cacheFile)..."

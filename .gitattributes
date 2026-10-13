@@ -9,5 +9,8 @@ Telegram/cmake/ayu_lib_tl.patch whitespace=-blank-at-eol,-space-before-tab,-blan
 Telegram/cmake/ayu_lib_ui.patch whitespace=-blank-at-eol,-space-before-tab,-blank-at-eof
 Telegram/cmake/ayu_lib_ui_features.patch whitespace=-blank-at-eol,-space-before-tab,-blank-at-eof
 
+# Keep the zxcvbn word lists byte-identical to upstream so their digests hold
+Telegram/Resources/zxcvbn/*.txt text eol=lf
+
 # Ensure lottie animations are treated as binary files
 *.lottie binary
