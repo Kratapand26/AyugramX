@@ -2821,10 +2821,10 @@ void HistoryItem::applySentMessage(const MTPDmessage &data) {
 	} else {
 		_flags &= ~MessageFlag::InvertMedia;
 	}
-	if (data.is_noforwards()) {
-		_flags |= MessageFlag::NoForwards;
+	if (data.is_ayuNoforwards()) {
+		_flags |= MessageFlag::AyuNoForwards;
 	} else {
-		_flags &= ~MessageFlag::NoForwards;
+		_flags &= ~MessageFlag::AyuNoForwards;
 	}
 
 	const auto wasTypes = sharedMediaTypes();
