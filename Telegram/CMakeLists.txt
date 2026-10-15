@@ -209,6 +209,8 @@ set(ayugram_files
         ayu/ui/boxes/plugin_info_box.h
         ayu/ui/boxes/forwarder_box.cpp
         ayu/ui/boxes/forwarder_box.h
+        ayu/ui/boxes/local_channels_box.cpp
+        ayu/ui/boxes/local_channels_box.h
         ayu/ui/components/image_view.cpp
         ayu/ui/components/image_view.h
         ayu/ui/components/icon_picker.cpp
@@ -249,6 +251,10 @@ set(ayugram_files
         ayu/features/forward/forwarder_log.h
         ayu/features/forward/forwarder_state.cpp
         ayu/features/forward/forwarder_state.h
+        ayu/features/local_channels/local_channels.cpp
+        ayu/features/local_channels/local_channels.h
+        ayu/features/local_channels/local_channels_data.cpp
+        ayu/features/local_channels/local_channels_data.h
         ayu/features/translator/ayu_translator.cpp
         ayu/features/translator/ayu_translator.h
         ayu/features/translator/ayu_translate_provider.cpp

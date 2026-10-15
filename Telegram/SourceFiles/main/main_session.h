@@ -18,6 +18,10 @@ class Updates;
 class SendProgressManager;
 } // namespace Api
 
+namespace Ayu {
+class LocalChannels;
+} // namespace Ayu
+
 namespace MTP {
 class Instance;
 struct ConfigFields;
@@ -127,6 +131,7 @@ public:
 	[[nodiscard]] Storage::Domain &domainLocal() const;
 
 	[[nodiscard]] AppConfig &appConfig() const;
+	[[nodiscard]] Ayu::LocalChannels &localChannels();
 	[[nodiscard]] bool messagePrimaryEditedDate() const {
 		return _messagePrimaryEditedDate;
 	}
@@ -364,6 +369,7 @@ private:
 
 	const std::unique_ptr<Support::Helper> _supportHelper;
 	const std::unique_ptr<Support::FastButtonsBots> _fastButtonsBots;
+	std::unique_ptr<Ayu::LocalChannels> _localChannels;
 
 	std::shared_ptr<QImage> _selfUserpicView;
 	rpl::variable<bool> _premiumPossible = false;

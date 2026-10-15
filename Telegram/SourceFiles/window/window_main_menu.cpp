@@ -86,6 +86,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 // AyuGram includes
 #include "ayu/ayu_settings.h"
+#include "ayu/features/local_channels/local_channels.h"
+#include "ayu/ui/boxes/local_channels_box.h"
 #include "ayu/utils/telegram_helpers.h"
 #include "boxes/abstract_box.h"
 #include "styles/style_ayu_icons.h"
@@ -771,6 +773,21 @@ void MainMenu::setupMenu() {
 			{ &st::menuIconSavedMessages }
 		)->setClickedCallback([=] {
 			controller->showPeerHistory(controller->session().user());
+		});
+
+		const auto localChannels = _menu->add(
+			object_ptr<Ui::SlideWrap<Ui::SettingsButton>>(
+				_menu,
+				CreateButtonWithIcon(
+					_menu,
+					tr::ayu_LocalChannelsTitle(),
+					st::mainMenuButton,
+					{ &st::menuIconChannel })));
+		localChannels->toggleOn(
+			controller->session().localChannels().enabledValue());
+		localChannels->finishAnimating();
+		localChannels->entity()->setClickedCallback([=] {
+			Ayu::ShowLocalChannelsBox(controller);
 		});
 
 		if (settings.showLReadToggleInDrawer()) {

@@ -8,12 +8,15 @@
 
 #include "lang_auto.h"
 #include "ayu/ayu_settings.h"
+#include "ayu/features/local_channels/local_channels.h"
+#include "ayu/ui/boxes/local_channels_box.h"
 #include "ayu/ui/settings/ayu_builder.h"
 #include "ayu/ui/settings/settings_ayu_utils.h"
 #include "ayu/ui/settings/settings_main.h"
 #include "base/platform/base_platform_info.h"
 #include "core/application.h"
 #include "lang/lang_text_entity.h"
+#include "main/main_session.h"
 #include "platform/platform_translate_provider.h"
 #include "settings/settings_builder.h"
 #include "settings/settings_common.h"
@@ -163,6 +166,24 @@ void BuildQoLToggles(SectionBuilder &builder, AyuSectionBuilder &ayu) {
 	builder.addSubsectionTitle(tr::ayu_CategoryGeneral());
 
 	const auto controller = builder.controller();
+	const auto localChannels = &controller->session().localChannels();
+	const auto localChannelsToggle = builder.addButton({
+		.id = u"ayu/localChannels"_q,
+		.title = tr::ayu_LocalChannelsEnable(),
+		.st = &st::settingsButtonNoIcon,
+		.toggled = localChannels->enabledValue(),
+	});
+	if (localChannelsToggle) {
+		localChannelsToggle->toggledChanges() | rpl::on_next([=](bool enabled) {
+			localChannels->setEnabled(enabled);
+		}, localChannelsToggle->lifetime());
+	}
+	builder.addButton({
+		.id = u"ayu/manageLocalChannels"_q,
+		.title = tr::ayu_LocalChannelsManage(),
+		.st = &st::settingsButtonNoIcon,
+		.onClick = [=] { Ayu::ShowLocalChannelsBox(controller); },
+	});
 	ayu.addToggle({
 		.id = u"ayu/disableStories"_q,
 		.altIds = { u"ayu/hideStories"_q },
