@@ -91,6 +91,7 @@ tasks/
 /docs/changelog/
 
 # Project specific
+/Features/
 Telegram/SourceFiles/_other/packer_private.h
 
 # Telegram & AyuGram runtime / portable data
