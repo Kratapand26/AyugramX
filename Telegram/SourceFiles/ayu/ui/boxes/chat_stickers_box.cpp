@@ -521,7 +521,9 @@ void StickerResults::showActions(int index, QPoint position) {
 	const auto entry = _items[index].entry;
 	const auto document = _session->data().document(entry.documentId);
 	const auto origin = FullMsgId(_cache->peerId, entry.messageId);
-	_menu = base::make_unique_q<Ui::PopupMenu>(this);
+	_menu = base::make_unique_q<Ui::PopupMenu>(
+		this,
+		st::popupMenuWithIcons);
 	if (document->sticker() && !document->sticker()->set.empty()) {
 		_menu->addAction(tr::ayu_ChatStickersOpenPack(tr::now), crl::guard(this, [=] {
 			if (_controller) {
