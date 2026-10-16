@@ -168,3 +168,16 @@ forwarderMultilineInput: InputField(forwarderInputField) {
 	heightMin: 56px;
 	heightMax: 100px;
 }
+
+chatStickersBoxWidth: 520px;
+chatStickersCellWidth: 104px;
+chatStickersCellHeight: 120px;
+chatStickersPreviewSize: 80px;
+chatStickersListHeight: 80px;
+chatStickersListPreviewSize: 56px;
+chatStickersCellPadding: 12px;
+chatStickersTextGap: 4px;
+chatStickersToolbarPadding: 12px;
+chatStickersToolbarGap: 16px;
+chatStickersEmptyHeight: 96px;
+chatStickersPlaceholderFont: font(24px);

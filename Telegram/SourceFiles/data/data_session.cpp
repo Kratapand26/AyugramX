@@ -3553,6 +3553,16 @@ HistoryItem *Session::message(FullMsgId itemId) const {
 	return message(itemId.peer, itemId.msg);
 }
 
+void Session::enumerateMessages(
+		PeerId peerId,
+		Fn<void(not_null<HistoryItem*>)> action) const {
+	if (const auto list = messagesList(peerId)) {
+		for (const auto &[id, item] : *list) {
+			action(item);
+		}
+	}
+}
+
 void Session::removeReactionsFromParticipant(
 		not_null<PeerData*> peer,
 		MsgId msgId,

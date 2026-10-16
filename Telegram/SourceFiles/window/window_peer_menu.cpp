@@ -15,6 +15,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "boxes/star_gift_box.h"
 #include "chat_helpers/compose/compose_show.h"
 #include "chat_helpers/message_field.h"
+#include "ayu/features/chat_stickers/chat_stickers.h"
+#include "ayu/ui/boxes/chat_stickers_box.h"
 #include "ayu/ui/boxes/forwarder_box.h"
 #include "chat_helpers/share_message_phrase_factory.h"
 #include "ui/basic_click_handlers.h"
@@ -338,6 +340,7 @@ private:
 	void addDirectMessages();
 	void addToggleTopicClosed();
 	void addExportChat();
+	void addChatStickers();
 	void addTranslate();
 	void addReport();
 	void addNewContact();
@@ -1066,6 +1069,20 @@ void Filler::addDirectMessages() {
 			monoforum,
 			Window::SectionShow::Way::Forward);
 	}, &st::menuIconChatDiscuss);
+}
+
+void Filler::addChatStickers() {
+	if (!_peer || _sublist || !_controller->session().chatStickers().enabled()) {
+		return;
+	}
+	const auto weak = base::make_weak(_controller);
+	const auto peer = _peer;
+	const auto topicRootId = _topic ? _topic->rootId() : MsgId(0);
+	_addAction(tr::ayu_ChatStickersTitle(tr::now), [=] {
+		if (weak) {
+			Ayu::ShowChatStickersBox(weak.get(), peer, topicRootId);
+		}
+	}, &st::menuIconStickers);
 }
 
 void Filler::addExportChat() {
@@ -1962,6 +1979,7 @@ void Filler::fillHistoryActions() {
 	addViewDiscussion();
 	addDirectMessages();
 	addExportChat();
+	addChatStickers();
 
 	// AyuGram Auto-Forwarder Hook
 	_addAction(
@@ -2022,6 +2040,9 @@ void Filler::fillRepliesActions() {
 	addCreateTodoList();
 	addToggleTopicClosed();
 	addDeleteTopic();
+	if (_topic) {
+		addChatStickers();
+	}
 
 	// AyuGram Auto-Forwarder Hook
 	_addAction(

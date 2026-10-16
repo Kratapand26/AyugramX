@@ -24,6 +24,8 @@ public:
 	[[nodiscard]] const std::vector<LocalChannelEntry> &entries() const;
 	[[nodiscard]] rpl::producer<> changes() const;
 	[[nodiscard]] bool contains(not_null<ChannelData*> channel) const;
+	[[nodiscard]] ChannelData *cachedChannel(
+		const LocalChannelEntry &entry) const;
 	[[nodiscard]] QString add(not_null<ChannelData*> channel);
 	void remove(const QString &username);
 	[[nodiscard]] std::optional<int> importChannels(const QByteArray &bytes);

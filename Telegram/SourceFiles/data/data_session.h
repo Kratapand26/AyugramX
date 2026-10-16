@@ -620,6 +620,9 @@ public:
 		not_null<const PeerData*> peer,
 		MsgId itemId) const;
 	[[nodiscard]] HistoryItem *message(FullMsgId itemId) const;
+	void enumerateMessages(
+		PeerId peerId,
+		Fn<void(not_null<HistoryItem*>)> action) const;
 
 	[[nodiscard]] HistoryItem *nonChannelMessage(MsgId itemId) const;
 

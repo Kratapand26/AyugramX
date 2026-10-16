@@ -209,6 +209,8 @@ set(ayugram_files
         ayu/ui/boxes/plugin_info_box.h
         ayu/ui/boxes/forwarder_box.cpp
         ayu/ui/boxes/forwarder_box.h
+        ayu/ui/boxes/chat_stickers_box.cpp
+        ayu/ui/boxes/chat_stickers_box.h
         ayu/ui/boxes/local_channels_box.cpp
         ayu/ui/boxes/local_channels_box.h
         ayu/ui/components/image_view.cpp
@@ -251,6 +253,10 @@ set(ayugram_files
         ayu/features/forward/forwarder_log.h
         ayu/features/forward/forwarder_state.cpp
         ayu/features/forward/forwarder_state.h
+        ayu/features/chat_stickers/chat_stickers.cpp
+        ayu/features/chat_stickers/chat_stickers.h
+        ayu/features/chat_stickers/chat_stickers_data.cpp
+        ayu/features/chat_stickers/chat_stickers_data.h
         ayu/features/local_channels/local_channels.cpp
         ayu/features/local_channels/local_channels.h
         ayu/features/local_channels/local_channels_data.cpp

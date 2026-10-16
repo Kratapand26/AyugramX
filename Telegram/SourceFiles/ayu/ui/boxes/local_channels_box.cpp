@@ -18,11 +18,15 @@
 #include <QtCore/QFile>
 #include <QtCore/QSaveFile>
 
+#include <algorithm>
+
 #include "styles/style_layers.h"
 #include "styles/style_settings.h"
 
 namespace Ayu {
 namespace {
+
+constexpr auto kChannelsPerPage = 50;
 
 class LocalChannelRow final : public Ui::RpWidget {
 public:
@@ -43,6 +47,8 @@ private:
 struct OperationState {
 	mtpRequestId requestId = 0;
 	bool refreshScheduled = false;
+	QString query;
+	int page = 0;
 };
 
 LocalChannelRow::LocalChannelRow(
@@ -220,6 +226,20 @@ void OpenChannel(
 		const LocalChannelEntry &entry) {
 	const auto weak = base::make_weak(controller);
 	const auto channels = &controller->session().localChannels();
+	if (const auto channel = channels->cachedChannel(entry)) {
+		channels->cancel(state->requestId);
+		state->requestId = 0;
+		const auto error = channels->add(channel);
+		if (!error.isEmpty()) {
+			ShowError(controller, error);
+			return;
+		}
+		box->closeBox();
+		if (weak) {
+			weak->showPeerHistory(channel);
+		}
+		return;
+	}
 	if (channels->resolving(state->requestId)) {
 		return;
 	}
@@ -255,11 +275,25 @@ void FillRows(
 	const auto weak = base::make_weak(controller);
 	const auto channels = &controller->session().localChannels();
 	rows->clear();
+	if (state->query != query) {
+		state->query = query;
+		state->page = 0;
+	}
+	auto matching = std::vector<LocalChannelEntry>();
 	for (const auto &entry : channels->entries()) {
-		if (!entry.username.contains(query, Qt::CaseInsensitive)
-			&& !entry.title.contains(query, Qt::CaseInsensitive)) {
-			continue;
+		if (entry.username.contains(query, Qt::CaseInsensitive)
+			|| entry.title.contains(query, Qt::CaseInsensitive)) {
+			matching.push_back(entry);
 		}
+	}
+	const auto pages = std::max(
+		1,
+		(int(matching.size()) + kChannelsPerPage - 1) / kChannelsPerPage);
+	state->page = std::clamp(state->page, 0, pages - 1);
+	const auto first = state->page * kChannelsPerPage;
+	const auto last = std::min(first + kChannelsPerPage, int(matching.size()));
+	for (auto index = first; index != last; ++index) {
+		const auto entry = matching[index];
 		const auto label = entry.title.isEmpty()
 			? '@' + entry.username
 			: entry.title + u" (@"_q + entry.username + ')';
@@ -285,6 +319,37 @@ void FillRows(
 				tr::ayu_LocalChannelsEmpty(),
 				st::boxLabel),
 			st::boxPadding);
+	}
+	if (pages > 1) {
+		rows->add(object_ptr<Ui::FlatLabel>(
+			rows,
+			tr::ayu_LocalChannelsPage(
+				lt_current,
+				rpl::single(QString::number(state->page + 1)),
+				lt_total,
+				rpl::single(QString::number(pages))),
+			st::boxLabel), st::boxPadding);
+		const auto changePage = [=](int direction) {
+			state->page += direction;
+			crl::on_main(rows, [=] {
+				if (weak) {
+					FillRows(rows, box, weak.get(), state, query);
+					box->scrollToWidget(rows);
+				}
+			});
+		};
+		const auto previous = rows->add(object_ptr<Ui::SettingsButton>(
+			rows,
+			tr::ayu_LocalChannelsPrevious(),
+			st::settingsButtonNoIcon));
+		previous->setEnabled(state->page > 0);
+		previous->setClickedCallback([=] { changePage(-1); });
+		const auto next = rows->add(object_ptr<Ui::SettingsButton>(
+			rows,
+			tr::ayu_LocalChannelsNext(),
+			st::settingsButtonNoIcon));
+		next->setEnabled(state->page + 1 < pages);
+		next->setClickedCallback([=] { changePage(1); });
 	}
 }
 

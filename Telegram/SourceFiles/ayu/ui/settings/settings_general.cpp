@@ -8,6 +8,7 @@
 
 #include "lang_auto.h"
 #include "ayu/ayu_settings.h"
+#include "ayu/features/chat_stickers/chat_stickers.h"
 #include "ayu/features/local_channels/local_channels.h"
 #include "ayu/ui/boxes/local_channels_box.h"
 #include "ayu/ui/settings/ayu_builder.h"
@@ -184,6 +185,18 @@ void BuildQoLToggles(SectionBuilder &builder, AyuSectionBuilder &ayu) {
 		.st = &st::settingsButtonNoIcon,
 		.onClick = [=] { Ayu::ShowLocalChannelsBox(controller); },
 	});
+	const auto chatStickers = &controller->session().chatStickers();
+	const auto chatStickersToggle = builder.addButton({
+		.id = u"ayu/chatStickers"_q,
+		.title = tr::ayu_ChatStickersEnable(),
+		.st = &st::settingsButtonNoIcon,
+		.toggled = chatStickers->enabledValue(),
+	});
+	if (chatStickersToggle) {
+		chatStickersToggle->toggledChanges() | rpl::on_next([=](bool enabled) {
+			chatStickers->setEnabled(enabled);
+		}, chatStickersToggle->lifetime());
+	}
 	ayu.addToggle({
 		.id = u"ayu/disableStories"_q,
 		.altIds = { u"ayu/hideStories"_q },

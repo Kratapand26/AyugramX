@@ -74,6 +74,19 @@ bool LocalChannels::contains(not_null<ChannelData*> channel) const {
 	});
 }
 
+ChannelData *LocalChannels::cachedChannel(
+		const LocalChannelEntry &entry) const {
+	if (!enabled() || !entry.id) {
+		return nullptr;
+	}
+	const auto channel = _session->data().channelLoaded(ChannelId(entry.id));
+	return (channel
+		&& channel->isBroadcast()
+		&& !channel->isForbidden()
+		&& channel->accessHash()
+		&& !channel->username().isEmpty()) ? channel : nullptr;
+}
+
 QString LocalChannels::add(not_null<ChannelData*> channel) {
 	const auto entry = EntryFor(channel);
 	if (!enabled()
