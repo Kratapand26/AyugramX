@@ -63,6 +63,7 @@ constexpr auto kStickerCacheTag = uint8(0x02);
 constexpr auto kVoiceMessageCacheTag = uint8(0x03);
 constexpr auto kVideoMessageCacheTag = uint8(0x04);
 constexpr auto kAnimationCacheTag = uint8(0x05);
+constexpr auto kChatStickersCacheTag = uint8(0x06);
 
 } // namespace Data
 

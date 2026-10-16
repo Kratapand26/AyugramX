@@ -134,6 +134,7 @@ public:
 	[[nodiscard]] AppConfig &appConfig() const;
 	[[nodiscard]] Ayu::LocalChannels &localChannels();
 	[[nodiscard]] Ayu::ChatStickers &chatStickers();
+	void resetChatStickersCache();
 	[[nodiscard]] bool messagePrimaryEditedDate() const {
 		return _messagePrimaryEditedDate;
 	}

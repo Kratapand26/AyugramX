@@ -4,22 +4,24 @@
 #include "ayu/features/chat_stickers/chat_stickers.h"
 #include "base/weak_ptr.h"
 #include "boxes/sticker_set_box.h"
+#include "data/stickers/data_stickers.h"
+#include "data/stickers/data_stickers_set.h"
 #include "data/data_document.h"
 #include "data/data_document_media.h"
 #include "data/data_file_click_handler.h"
 #include "data/data_peer.h"
 #include "data/data_session.h"
-#include "data/stickers/data_stickers.h"
-#include "data/stickers/data_stickers_set.h"
 #include "lang/lang_keys.h"
 #include "main/main_session.h"
 #include "storage/storage_account.h"
+#include "ui/boxes/confirm_box.h"
 #include "ui/image/image.h"
 #include "ui/layers/generic_box.h"
-#include "ui/painter.h"
 #include "ui/widgets/buttons.h"
 #include "ui/widgets/labels.h"
 #include "ui/widgets/popup_menu.h"
+#include "ui/widgets/tooltip.h"
+#include "ui/painter.h"
 #include "window/window_session_controller.h"
 
 #include <QtGui/QContextMenuEvent>
@@ -82,36 +84,54 @@ struct DisplaySticker {
 
 class StickerToolbar final : public Ui::RpWidget {
 public:
-	explicit StickerToolbar(QWidget *parent)
-	: RpWidget(parent)
-	, view(Ui::CreateChild<Ui::LinkButton>(this, QString()))
-	, sort(Ui::CreateChild<Ui::LinkButton>(this, QString()))
-	, packs(Ui::CreateChild<Ui::LinkButton>(this, QString())) {
-	}
+	explicit StickerToolbar(QWidget *parent);
 
 	const not_null<Ui::LinkButton*> view;
 	const not_null<Ui::LinkButton*> sort;
 	const not_null<Ui::LinkButton*> packs;
+	const not_null<Ui::IconButton*> info;
 
 private:
-	int resizeGetHeight(int width) override {
-		auto left = 0;
-		auto top = st::chatStickersToolbarPadding;
-		auto rowHeight = 0;
-		for (const auto button : { view, sort, packs }) {
-			if (left && left + button->width() > width) {
-				left = 0;
-				top += rowHeight + st::chatStickersToolbarGap;
-				rowHeight = 0;
-			}
-			button->moveToLeft(left, top, width);
-			left += button->width() + st::chatStickersToolbarGap;
-			rowHeight = std::max(rowHeight, button->height());
-		}
-		return top + rowHeight + st::chatStickersToolbarPadding;
-	}
+	int resizeGetHeight(int width) override;
 
 };
+
+StickerToolbar::StickerToolbar(QWidget *parent)
+: RpWidget(parent)
+, view(Ui::CreateChild<Ui::LinkButton>(this, QString()))
+, sort(Ui::CreateChild<Ui::LinkButton>(this, QString()))
+, packs(Ui::CreateChild<Ui::LinkButton>(this, QString()))
+, info(Ui::CreateChild<Ui::IconButton>(this, st::chatStickersInfoButton)) {
+	info->setAccessibleName(tr::ayu_ChatStickersInfo(tr::now));
+	info->setFocusPolicy(Qt::StrongFocus);
+	Ui::InstallTooltip(info, [] {
+		return tr::ayu_ChatStickersAbout(tr::now);
+	});
+}
+
+int StickerToolbar::resizeGetHeight(int width) {
+	const auto available = std::max(
+		0,
+		width - info->width() - st::chatStickersToolbarGap);
+	auto left = 0;
+	auto top = st::chatStickersToolbarPadding;
+	auto rowHeight = 0;
+	for (const auto button : { view, sort, packs }) {
+		if (left && left + button->width() > available) {
+			left = 0;
+			top += rowHeight + st::chatStickersToolbarGap;
+			rowHeight = 0;
+		}
+		button->moveToLeft(left, top, width);
+		left += button->width() + st::chatStickersToolbarGap;
+		rowHeight = std::max(rowHeight, button->height());
+	}
+	info->moveToRight(0, st::chatStickersToolbarPadding, width);
+	return std::max(
+		top + rowHeight,
+		st::chatStickersToolbarPadding + info->height())
+		+ st::chatStickersToolbarPadding;
+}
 
 class StickerResults final : public Ui::RpWidget {
 public:
@@ -576,6 +596,7 @@ struct BrowserState {
 	bool packs = false;
 	bool scheduled = false;
 	base::unique_qptr<Ui::PopupMenu> menu;
+	QPointer<Ui::RoundButton> refresh;
 };
 
 } // namespace
@@ -603,11 +624,12 @@ void ShowChatStickersBox(
 		state->order = (orderPref == u"usage"_q)
 			? StickerOrder::Usage
 			: (orderPref == u"pack"_q) ? StickerOrder::Pack : StickerOrder::Newest;
-		box->addRow(object_ptr<Ui::FlatLabel>(
-			box,
-			tr::ayu_ChatStickersAbout(),
-			st::boxLabel));
 		const auto toolbar = box->addRow(object_ptr<StickerToolbar>(box));
+		toolbar->info->setClickedCallback([=] {
+			if (weak) {
+				weak->show(Ui::MakeInformBox(tr::ayu_ChatStickersAbout(tr::now)));
+			}
+		});
 		const auto results = box->addRow(object_ptr<StickerResults>(
 			box,
 			box,
@@ -618,7 +640,7 @@ void ShowChatStickersBox(
 		const auto status = bottom->add(object_ptr<Ui::FlatLabel>(
 			bottom,
 			QString(),
-			st::boxLabel), st::boxPadding);
+			st::boxLabel), st::chatStickersStatusPadding);
 		const auto loadText = box->lifetime().make_state<rpl::variable<QString>>();
 		const auto load = bottom->add(object_ptr<Ui::SettingsButton>(
 			bottom,
@@ -629,11 +651,23 @@ void ShowChatStickersBox(
 			*loadText = loading
 				? tr::ayu_ChatStickersLoading(tr::now)
 				: tr::ayu_ChatStickersLoadMore(tr::now);
-			load->setEnabled(!loading && !cache->finished && !cache->data.full());
-			status->setText(cache->data.full()
+			load->setEnabled(cache->loaded
+				&& !loading
+				&& !cache->finished
+				&& !cache->data.full());
+			if (state->refresh) {
+				state->refresh->setEnabled(cache->loaded && !loading);
+			}
+			status->setText(!cache->loaded
+				? tr::ayu_ChatStickersRestoring(tr::now)
+				: cache->saveFailed
+				? tr::ayu_ChatStickersSaveFailed(tr::now)
+				: cache->data.full()
 				? tr::ayu_ChatStickersFull(tr::now)
 				: cache->finished
 				? tr::ayu_ChatStickersFinished(tr::now)
+				: !cache->scanned
+				? tr::ayu_ChatStickersCached(tr::now)
 				: tr::ayu_ChatStickersScanned(
 					tr::now,
 					lt_count,
@@ -648,19 +682,22 @@ void ShowChatStickersBox(
 			toolbar->resizeToWidth(toolbar->width());
 			results->refresh(state->order, state->grid, state->packs);
 		};
-		const auto loadMore = [=] {
-			if (stickers->loading(cache)) {
+		const auto requestPage = [=](bool refresh) {
+			if (!cache->loaded || stickers->loading(cache)) {
 				return;
 			}
-			state->requestId = stickers->loadMore(cache, crl::guard(box, [=](QString error) {
+			const auto done = crl::guard(box, [=](QString error) {
 				state->requestId = 0;
 				if (weak && !error.isEmpty()) {
 					weak->showToast(error);
 				}
-			}));
+			});
+			state->requestId = refresh
+				? stickers->refresh(cache, done)
+				: stickers->loadMore(cache, done);
 			update();
 		};
-		load->setClickedCallback(loadMore);
+		load->setClickedCallback([=] { requestPage(false); });
 		toolbar->view->setClickedCallback([=] {
 			state->grid = !state->grid;
 			controller->session().local().writePref<QString>(
@@ -714,12 +751,28 @@ void ShowChatStickersBox(
 		}, box->lifetime());
 		box->boxClosing() | rpl::on_next([=] {
 			stickers->cancel(state->requestId);
+			stickers->flush(cache);
 		}, box->lifetime());
 		box->addButton(tr::lng_close(), [=] { box->closeBox(); });
-		box->addButton(tr::ayu_ChatStickersRefresh(), [=] {
-			stickers->restart(cache);
-			loadMore();
+		state->refresh = box->addButton(tr::ayu_ChatStickersRefresh(), [=] {
+			requestPage(true);
 			box->scrollToY(0);
+		});
+		box->addLeftButton(tr::ayu_ChatStickersClear(), [=] {
+			if (!weak) {
+				return;
+			}
+			weak->show(Ui::MakeConfirmBox({
+				.text = cache->topicRootId
+					? tr::ayu_ChatStickersClearTopic(tr::now)
+					: tr::ayu_ChatStickersClearChat(tr::now),
+				.confirmed = crl::guard(box, [=] {
+					stickers->clear(cache);
+					state->requestId = 0;
+					box->scrollToY(0);
+				}),
+				.confirmText = tr::ayu_ChatStickersClear(),
+			}));
 		});
 		box->setFocusCallback([=] { results->setFocus(); });
 		update();

@@ -53,6 +53,10 @@ bool ChatStickersData::full() const {
 	return _messages.size() >= kChatStickersMessageLimit;
 }
 
+bool ChatStickersData::contains(MsgId messageId) const {
+	return _messages.find(messageId) != end(_messages);
+}
+
 std::vector<ChatStickerEntry> ChatStickersData::entries() const {
 	auto result = std::vector<ChatStickerEntry>();
 	result.reserve(_stickers.size());
@@ -63,6 +67,17 @@ std::vector<ChatStickerEntry> ChatStickersData::entries() const {
 			messages.rbegin()->second,
 			int(messages.size()),
 		});
+	}
+	return result;
+}
+
+std::vector<ChatStickerMessage> ChatStickersData::messages() const {
+	auto result = std::vector<ChatStickerMessage>();
+	result.reserve(_messages.size());
+	for (const auto &[documentId, messages] : _stickers) {
+		for (const auto &[messageId, date] : messages) {
+			result.push_back({ messageId, documentId, date });
+		}
 	}
 	return result;
 }

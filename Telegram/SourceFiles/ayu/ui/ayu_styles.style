@@ -177,7 +177,18 @@ chatStickersListHeight: 80px;
 chatStickersListPreviewSize: 56px;
 chatStickersCellPadding: 12px;
 chatStickersTextGap: 4px;
-chatStickersToolbarPadding: 12px;
+chatStickersToolbarPadding: 8px;
 chatStickersToolbarGap: 16px;
 chatStickersEmptyHeight: 96px;
 chatStickersPlaceholderFont: font(24px);
+
+chatStickersStatusPadding: margins(24px, 8px, 24px, 0px);
+chatStickersInfoButton: IconButton(defaultIconButton) {
+	width: 28px;
+	height: 28px;
+	icon: icon {{ "menu/info", windowSubTextFg }};
+	iconOver: icon {{ "menu/info", windowFg }};
+	rippleAreaPosition: point(0px, 0px);
+	rippleAreaSize: 28px;
+	ripple: defaultRippleAnimation;
+}

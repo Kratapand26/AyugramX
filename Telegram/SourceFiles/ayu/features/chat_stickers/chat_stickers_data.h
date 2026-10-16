@@ -9,6 +9,12 @@ namespace Ayu {
 
 inline constexpr auto kChatStickersMessageLimit = 50000;
 
+struct ChatStickerMessage {
+	MsgId messageId = 0;
+	DocumentId documentId = 0;
+	TimeId date = 0;
+};
+
 struct ChatStickerEntry {
 	DocumentId documentId = 0;
 	MsgId messageId = 0;
@@ -23,7 +29,9 @@ public:
 	void clear();
 
 	[[nodiscard]] bool full() const;
+	[[nodiscard]] bool contains(MsgId messageId) const;
 	[[nodiscard]] std::vector<ChatStickerEntry> entries() const;
+	[[nodiscard]] std::vector<ChatStickerMessage> messages() const;
 
 private:
 	std::map<MsgId, DocumentId> _messages;

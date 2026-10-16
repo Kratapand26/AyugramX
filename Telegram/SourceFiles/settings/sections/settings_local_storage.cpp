@@ -69,6 +69,7 @@ constexpr auto kChartTags = std::array<uint16, kChartPartsCount>{ {
 	Data::kVideoMessageCacheTag,
 	Data::kAnimationCacheTag,
 	kFakeMediaCacheTag,
+	Data::kChatStickersCacheTag,
 } };
 
 int ChartIndexForTag(uint16 tag) {
@@ -183,6 +184,7 @@ QString PartTitle(int index, size_type count) {
 	case 3: return tr::lng_local_storage_round(tr::now, lt_count, count);
 	case 4: return tr::lng_local_storage_animation(tr::now, lt_count, count);
 	case 5: return tr::lng_local_storage_media_title(tr::now);
+	case 6: return tr::ayu_ChatStickersTitle(tr::now);
 	}
 	return QString();
 }
@@ -195,6 +197,7 @@ QString PartName(int index) {
 	case 3: return tr::lng_local_storage_round_title(tr::now);
 	case 4: return tr::lng_local_storage_animation_title(tr::now);
 	case 5: return tr::lng_local_storage_media_title(tr::now);
+	case 6: return tr::ayu_ChatStickersTitle(tr::now);
 	}
 	return QString();
 }
@@ -207,6 +210,7 @@ const style::icon &ParticleIcon(int index) {
 	case 3: return st::localStorageParticleVideos;
 	case 4: return st::localStorageParticleVideos;
 	case 5: return st::localStorageParticleDocuments;
+	case 6: return st::localStorageParticleStickers;
 	}
 	return st::localStorageParticleDocuments;
 }
@@ -1761,6 +1765,10 @@ void LocalStorage::clearSelected() {
 }
 
 void LocalStorage::startClearing() {
+	if (_allSelected.current()
+		|| _selected[ChartIndexForTag(Data::kChatStickersCacheTag)]) {
+		_session->resetChatStickersCache();
+	}
 	if (_allSelected.current()) {
 		_db->clear();
 		_dbBig->clear();
@@ -1887,6 +1895,7 @@ void LocalStorage::setupControls(not_null<Ui::VerticalLayout*> container) {
 			case 3: return tagged(Data::kVideoMessageCacheTag);
 			case 4: return tagged(Data::kAnimationCacheTag);
 			case 5: return _statsBig.full.count;
+			case 6: return tagged(Data::kChatStickersCacheTag);
 			}
 			return size_type();
 		}();
@@ -1914,6 +1923,7 @@ void LocalStorage::setupControls(not_null<Ui::VerticalLayout*> container) {
 	createTagRow(categoriesIsland, Data::kVideoMessageCacheTag);
 	createTagRow(categoriesIsland, Data::kAnimationCacheTag);
 	createRow(categoriesIsland, kFakeMediaCacheTag, _statsBig.full);
+	createTagRow(categoriesIsland, Data::kChatStickersCacheTag);
 
 	_clearButton = categoriesIsland->add(
 		object_ptr<ClearButton>(categoriesIsland),

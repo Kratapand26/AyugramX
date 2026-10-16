@@ -36,7 +36,7 @@ class BoxContent;
 
 namespace Settings {
 
-inline constexpr auto kChartPartsCount = 6;
+inline constexpr auto kChartPartsCount = 7;
 
 [[nodiscard]] Type LocalStorageId();
 
@@ -125,7 +125,7 @@ private:
 
 	base::flat_map<uint16, not_null<Ui::SlideWrap<Row>*>> _rows;
 	std::array<bool, kChartPartsCount> _selected
-		= { { true, true, true, true, true, true } };
+		= { { true, true, true, true, true, true, true } };
 	rpl::variable<bool> _allSelected = true;
 	Chart *_chart = nullptr;
 	Ui::SlideWrap<Ui::VerticalLayout> *_categoriesWrap = nullptr;

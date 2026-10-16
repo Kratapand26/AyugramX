@@ -255,6 +255,8 @@ set(ayugram_files
         ayu/features/forward/forwarder_state.h
         ayu/features/chat_stickers/chat_stickers.cpp
         ayu/features/chat_stickers/chat_stickers.h
+        ayu/features/chat_stickers/chat_stickers_cache.cpp
+        ayu/features/chat_stickers/chat_stickers_cache.h
         ayu/features/chat_stickers/chat_stickers_data.cpp
         ayu/features/chat_stickers/chat_stickers_data.h
         ayu/features/local_channels/local_channels.cpp

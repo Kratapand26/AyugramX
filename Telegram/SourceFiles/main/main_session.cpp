@@ -338,6 +338,12 @@ Ayu::ChatStickers &Session::chatStickers() {
 	return *_chatStickers;
 }
 
+void Session::resetChatStickersCache() {
+	if (_chatStickers) {
+		_chatStickers->resetAll();
+	}
+}
+
 void Session::appConfigRefreshed() {
 	const auto &config = appConfig();
 

@@ -1894,6 +1894,7 @@ void Filler::fillChatsListActions() {
 	}
 	addManageChat();
 	addNewMembers();
+	addChatStickers();
 	addBoostChat();
 	addVideoChat();
 	_addAction(PeerMenuCallback::Args{ .isSeparator = true });
@@ -1947,6 +1948,9 @@ void Filler::fillContextMenuActions() {
 	addToggleUnreadMark();
 	addToggleTopicClosed();
 	addToggleFolder();
+	if (_topic) {
+		addChatStickers();
+	}
 	if (const auto user = _peer->asUser()) {
 		if (!user->isContact()) {
 			addBlockUser();
@@ -2019,6 +2023,9 @@ void Filler::fillProfileActions() {
 	addDirectMessages();
 	addExportChat();
 	addToggleNoForwards();
+	if (_topic) {
+		addChatStickers();
+	}
 	addToggleFolder();
 	addBlockUser();
 	addBanFromChannel();

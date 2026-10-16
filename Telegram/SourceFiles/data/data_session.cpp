@@ -6206,6 +6206,7 @@ rpl::producer<RecentJoinChat> Session::recentJoinChat() const {
 }
 
 void Session::clearLocalStorage() {
+	_session->resetChatStickersCache();
 	_cache->close();
 	_cache->clear();
 	_bigFileCache->close();
