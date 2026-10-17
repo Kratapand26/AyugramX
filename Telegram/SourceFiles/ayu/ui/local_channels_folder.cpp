@@ -176,7 +176,7 @@ void LocalChannelsFolder::refresh() {
 			moveSelection(key == Qt::Key_Down ? 1 : -1);
 			return base::EventFilterResult::Cancel;
 		});
-		state->buttons.push_back(button.get());
+		state->buttons.push_back(button);
 		state->actions.push_back(action);
 	}
 	if (matching.empty()) {
