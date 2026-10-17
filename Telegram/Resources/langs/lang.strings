@@ -9610,9 +9610,11 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "ayu_BoostDownloadSpeed_about" = "Ramp up parallel connections sooner when downloading large files.";
 
 "ayu_LocalChannelsTitle" = "Local Channels";
+"ayu_LocalChannelsFolder" = "Local";
+"ayu_LocalChannelsInfo" = "About Local Channels";
 "ayu_LocalChannelsEnable" = "Enable Local Channels for this account";
 "ayu_LocalChannelsManage" = "Manage Local Channels";
-"ayu_LocalChannelsAbout" = "Saved only for this account, without joining. Channels refresh when opened, using your usual Ghost Mode and notification settings. No background checks or closed-channel alerts. Turning this off keeps the list.";
+"ayu_LocalChannelsAbout" = "Follow public channels on this device without joining. When enabled, the Local folder above All Chats contains this account\'s saved channels, including imported entries. Channels refresh when opened, using your usual Ghost Mode and notification settings. There are no periodic background checks or closed-channel alerts. Search checks saved names and titles locally. Add or remove channels here or from a channel\'s menu; import and export manage the saved list. Turning this off hides the folder and keeps the list.";
 "ayu_LocalChannelsAdd" = "Add a public channel";
 "ayu_LocalChannelsPlaceholder" = "@username or https://t.me/channel";
 "ayu_LocalChannelsSearch" = "Search saved channels";

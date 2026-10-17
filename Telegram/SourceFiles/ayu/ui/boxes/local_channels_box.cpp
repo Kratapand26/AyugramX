@@ -12,6 +12,7 @@
 #include "ui/widgets/fields/input_field.h"
 #include "ui/widgets/buttons.h"
 #include "ui/widgets/labels.h"
+#include "ui/widgets/tooltip.h"
 #include "ui/wrap/vertical_layout.h"
 #include "window/window_session_controller.h"
 
@@ -20,6 +21,7 @@
 
 #include <algorithm>
 
+#include "styles/style_ayu_styles.h"
 #include "styles/style_layers.h"
 #include "styles/style_settings.h"
 
@@ -49,6 +51,7 @@ struct OperationState {
 	bool refreshScheduled = false;
 	QString query;
 	int page = 0;
+	LocalChannelOpener opener;
 };
 
 LocalChannelRow::LocalChannelRow(
@@ -219,53 +222,6 @@ void ExportChannels(
 		}));
 }
 
-void OpenChannel(
-		not_null<Ui::GenericBox*> box,
-		not_null<Window::SessionController*> controller,
-		not_null<OperationState*> state,
-		const LocalChannelEntry &entry) {
-	const auto weak = base::make_weak(controller);
-	const auto channels = &controller->session().localChannels();
-	if (const auto channel = channels->cachedChannel(entry)) {
-		channels->cancel(state->requestId);
-		state->requestId = 0;
-		const auto error = channels->add(channel);
-		if (!error.isEmpty()) {
-			ShowError(controller, error);
-			return;
-		}
-		box->closeBox();
-		if (weak) {
-			weak->showPeerHistory(channel);
-		}
-		return;
-	}
-	if (channels->resolving(state->requestId)) {
-		return;
-	}
-	state->requestId = channels->resolve(
-		entry,
-		crl::guard(box, [=](not_null<ChannelData*> channel) {
-			state->requestId = 0;
-			if (!weak) {
-				return;
-			}
-			const auto error = channels->add(channel);
-			if (!error.isEmpty()) {
-				ShowError(weak.get(), error);
-				return;
-			}
-			box->closeBox();
-			weak->showPeerHistory(channel);
-		}),
-		crl::guard(box, [=](QString error) {
-			state->requestId = 0;
-			if (weak) {
-				ShowError(weak.get(), error);
-			}
-		}));
-}
-
 void FillRows(
 		not_null<Ui::VerticalLayout*> rows,
 		not_null<Ui::GenericBox*> box,
@@ -299,15 +255,14 @@ void FillRows(
 			: entry.title + u" (@"_q + entry.username + ')';
 		const auto open = [=] {
 			if (weak) {
-				OpenChannel(box, weak.get(), state, entry);
+				state->opener.open(entry);
 			}
 		};
 		const auto remove = [=] {
 			if (!weak) {
 				return;
 			}
-			channels->cancel(state->requestId);
-			state->requestId = 0;
+			state->opener.cancel();
 			channels->remove(entry.username);
 		};
 		rows->add(object_ptr<LocalChannelRow>(rows, label, open, remove));
@@ -355,6 +310,57 @@ void FillRows(
 
 } // namespace
 
+LocalChannelOpener MakeLocalChannelOpener(
+		not_null<Ui::RpWidget*> context,
+		not_null<Window::SessionController*> controller,
+		Fn<void()> beforeOpen) {
+	const auto weak = base::make_weak(controller);
+	const auto channels = &controller->session().localChannels();
+	const auto requestId = std::make_shared<mtpRequestId>(0);
+	const auto cancel = [=] {
+		channels->cancel(base::take(*requestId));
+	};
+	context->lifetime().add(cancel);
+	channels->changes() | rpl::on_next(cancel, context->lifetime());
+	const auto show = crl::guard(context, [=](not_null<ChannelData*> channel) {
+		*requestId = 0;
+		if (!weak) {
+			return;
+		}
+		const auto error = channels->add(channel);
+		if (!error.isEmpty()) {
+			ShowError(weak.get(), error);
+			return;
+		}
+		beforeOpen();
+		if (weak) {
+			weak->showPeerHistory(channel);
+		}
+	});
+	return {
+		.open = crl::guard(context, [=](const LocalChannelEntry &entry) {
+			if (!weak || !channels->enabled()) {
+				return;
+			}
+			if (const auto channel = channels->cachedChannel(entry)) {
+				cancel();
+				show(channel);
+			} else if (!channels->resolving(*requestId)) {
+				*requestId = channels->resolve(
+					entry,
+					show,
+					crl::guard(context, [=](QString error) {
+						*requestId = 0;
+						if (weak) {
+							ShowError(weak.get(), error);
+						}
+					}));
+			}
+		}),
+		.cancel = crl::guard(context, cancel),
+	};
+}
+
 void ShowLocalChannelsBox(not_null<Window::SessionController*> controller) {
 	const auto weak = base::make_weak(controller);
 	const auto channels = &controller->session().localChannels();
@@ -363,10 +369,19 @@ void ShowLocalChannelsBox(not_null<Window::SessionController*> controller) {
 		box->setWidth(st::boxWideWidth);
 		box->setMaxHeight(st::boxMaxListHeight);
 		const auto state = box->lifetime().make_state<OperationState>();
-		box->addRow(object_ptr<Ui::FlatLabel>(
-			box,
-			tr::ayu_LocalChannelsAbout(),
-			st::boxLabel));
+		state->opener = MakeLocalChannelOpener(box, controller, [=] {
+			box->closeBox();
+		});
+		box->addTopButton(st::boxTitleClose, [=] { box->closeBox(); });
+		const auto info = box->addTopButton(st::localChannelsBoxInfo, [=] {
+			if (weak) {
+				weak->show(Ui::MakeInformBox(tr::ayu_LocalChannelsAbout(tr::now)));
+			}
+		});
+		info->setAccessibleName(tr::ayu_LocalChannelsInfo(tr::now));
+		Ui::InstallTooltip(info.data(), [] {
+			return tr::ayu_LocalChannelsAbout(tr::now);
+		});
 		const auto toggle = box->addRow(
 			object_ptr<Ui::SettingsButton>(
 				box,
@@ -375,8 +390,10 @@ void ShowLocalChannelsBox(not_null<Window::SessionController*> controller) {
 			style::margins());
 		toggle->toggleOn(channels->enabledValue());
 		toggle->toggledChanges() | rpl::on_next([=](bool enabled) {
+			if (!enabled) {
+				state->opener.cancel();
+			}
 			channels->setEnabled(enabled);
-			state->requestId = 0;
 		}, box->lifetime());
 		Settings::AddButtonWithIcon(
 			box->verticalLayout(),
@@ -438,7 +455,7 @@ void ShowLocalChannelsBox(not_null<Window::SessionController*> controller) {
 		search->changes() | rpl::on_next(refresh, box->lifetime());
 		FillRows(rows, box, controller, state, QString());
 		box->boxClosing() | rpl::on_next([=] {
-			channels->cancel(state->requestId);
+			state->opener.cancel();
 		}, box->lifetime());
 		box->addButton(tr::lng_close(), [=] { box->closeBox(); });
 	}));

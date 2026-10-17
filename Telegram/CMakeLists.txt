@@ -213,6 +213,8 @@ set(ayugram_files
         ayu/ui/boxes/chat_stickers_box.h
         ayu/ui/boxes/local_channels_box.cpp
         ayu/ui/boxes/local_channels_box.h
+        ayu/ui/local_channels_folder.cpp
+        ayu/ui/local_channels_folder.h
         ayu/ui/components/image_view.cpp
         ayu/ui/components/image_view.h
         ayu/ui/components/icon_picker.cpp

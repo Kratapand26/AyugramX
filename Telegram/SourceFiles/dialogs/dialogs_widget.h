@@ -19,6 +19,10 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 
 class ChannelData;
 
+namespace Ayu {
+class LocalChannelsFolder;
+} // namespace Ayu
+
 namespace MTP {
 class Error;
 } // namespace MTP
@@ -249,6 +253,7 @@ private:
 	[[nodiscard]] bool communityOverlaysShown() const;
 	void updateFrozenAccountBar();
 	void updateControlsVisibility(bool fast = false);
+	void toggleLocalChannelsFolder(bool shown);
 	void updateLockUnlockVisibility(
 		anim::type animated = anim::type::instant);
 	void updateLoadMoreChatsVisibility();
@@ -353,6 +358,7 @@ private:
 	std::unique_ptr<HistoryView::ContactStatus> _forumReportBar;
 
 	base::unique_qptr<Ui::RpWidget> _chatFilters;
+	base::unique_qptr<Ayu::LocalChannelsFolder> _localChannelsFolder;
 
 	base::unique_qptr<Ui::SlideWrap<Ui::RpWidget>> _topBarSuggestion;
 	base::unique_qptr<Ui::RpWidget> _topBarSuggestionPlaceholder;

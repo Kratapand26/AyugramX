@@ -7,6 +7,8 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "window/window_session_controller.h"
 
+#include "ayu/features/local_channels/local_channels.h"
+
 #include "apiwrap.h"
 #include "api/api_cloud_password.h"
 #include "api/api_text_entities.h"
@@ -1666,7 +1668,8 @@ SessionController::SessionController(
 	}, lifetime());
 
 	const auto processFiltersMenu = [this] {
-		if (SessionNavigation::session().data().chatsFilters().has()) {
+		if (SessionNavigation::session().data().chatsFilters().has()
+			|| SessionNavigation::session().localChannels().enabled()) {
 			const auto isHorizontal
 				= Core::App().settings().chatFiltersHorizontal()
 					|| !enoughSpaceForFilters();
@@ -1680,14 +1683,20 @@ SessionController::SessionController(
 	rpl::merge(
 		enoughSpaceForFiltersValue() | rpl::skip(1) | rpl::to_empty,
 		Core::App().settings().chatFiltersHorizontalChanges() | rpl::to_empty,
-		session->data().chatsFilters().changed()
+		session->data().chatsFilters().changed(),
+		session->localChannels().enabledValue()
+			| rpl::skip(1) | rpl::to_empty
 	) | rpl::on_next([=] {
+		if (!session->localChannels().enabled()) {
+			hideLocalChannelsFolder();
+		}
 		if (!_filtersActivated) {
 			processFiltersMenu();
 		}
 		checkOpenedFilter();
 		crl::on_main(this, processFiltersMenu);
 	}, lifetime());
+	crl::on_main(this, processFiltersMenu);
 
 	session->data().itemIdChanged(
 	) | rpl::on_next([=](Data::Session::IdChange change) {
@@ -2066,7 +2075,7 @@ void SessionController::activateFirstChatsFilter() {
 	_filtersActivated = true;
 
 	const auto &settings = AyuSettings::getInstance();
-	if (!settings.hideAllChatsFolder()) {
+	if (!settings.hideAllChatsFolder() && !localChannelsFolderShown()) {
 		setActiveChatsFilter(session().data().chatsFilters().defaultId());
 	}
 }
@@ -2097,6 +2106,7 @@ bool SessionController::openFolderInDifferentWindow(
 }
 
 void SessionController::openFolder(not_null<Data::Folder*> folder) {
+	hideLocalChannelsFolder();
 	pushChatHistory({ folder, MsgId() });
 	if (openFolderInDifferentWindow(folder)) {
 		return;
@@ -2137,6 +2147,7 @@ bool SessionController::openCommunityInDifferentWindow(
 }
 
 void SessionController::openCommunity(not_null<Data::CommunityInfo*> info) {
+	hideLocalChannelsFolder();
 	if (openCommunityInDifferentWindow(info)) {
 		return;
 	} else if (_openedCommunity.current() != info) {
@@ -2227,6 +2238,7 @@ void SessionController::showForum(
 		not_null<Data::Forum*> forum,
 		const SectionShow &params,
 		MsgId showAtMsgId) {
+	hideLocalChannelsFolder();
 	const auto forced = params.forceTopicsList;
 	if (showForumInDifferentWindow(forum, params, showAtMsgId)) {
 		return;
@@ -3490,12 +3502,38 @@ FilterId SessionController::activeChatsFilterCurrent() const {
 	return _activeChatsFilter.current();
 }
 
+bool SessionController::localChannelsFolderShown() const {
+	return _localChannelsFolderShown.current();
+}
+
+rpl::producer<bool> SessionController::localChannelsFolderShownValue() const {
+	return _localChannelsFolderShown.value();
+}
+
+void SessionController::showLocalChannelsFolder() {
+	if (!isPrimary()
+		|| !session().localChannels().enabled()
+		|| localChannelsFolderShown()) {
+		return;
+	}
+	setActiveChatsFilter(0);
+	closeForum();
+	closeFolder();
+	closeCommunity();
+	_localChannelsFolderShown = true;
+}
+
+void SessionController::hideLocalChannelsFolder() {
+	_localChannelsFolderShown = false;
+}
+
 void SessionController::setActiveChatsFilter(
 		FilterId id,
 		const SectionShow &params) {
 	if (!isPrimary()) {
 		return;
 	}
+	hideLocalChannelsFolder();
 	const auto changed = (activeChatsFilterCurrent() != id);
 	if (changed) {
 		resetFakeUnreadWhileOpened();

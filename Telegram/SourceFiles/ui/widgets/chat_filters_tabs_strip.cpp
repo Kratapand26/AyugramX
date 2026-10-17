@@ -7,6 +7,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "ui/widgets/chat_filters_tabs_strip.h"
 
+#include "ayu/features/local_channels/local_channels.h"
 #include "api/api_chat_filters_remove_manager.h"
 #include "boxes/choose_filter_box.h"
 #include "boxes/filters/edit_filter_box.h"
@@ -391,7 +392,11 @@ not_null<Ui::RpWidget*> AddChatFiltersTabsStrip(
 
 	const auto rebuild = [=] {
 		const auto &list = session->data().chatsFilters().list();
-		if ((list.size() <= 1 && !slider->width()) || state->ignoreRefresh) {
+		if ((list.size() <= 1
+			&& !slider->width()
+			&& !(trackActiveFilterAndUnreadAndReorder
+				&& session->localChannels().enabled()))
+			|| state->ignoreRefresh) {
 			return;
 		}
 		const auto context = Core::TextContext({ .session = session });
@@ -461,7 +466,9 @@ not_null<Ui::RpWidget*> AddChatFiltersTabsStrip(
 					scrollToIndex(
 						i,
 						wasLast ? anim::type::normal : anim::type::instant);
-					if (wasLast || !trackActiveFilterAndUnreadAndReorder) {
+					if ((!trackActiveFilterAndUnreadAndReorder
+						|| !controller->localChannelsFolderShown())
+						&& (wasLast || !trackActiveFilterAndUnreadAndReorder)) {
 						applyFilter(filter);
 					}
 					return;
@@ -520,7 +527,9 @@ not_null<Ui::RpWidget*> AddChatFiltersTabsStrip(
 					[=](int i) { slider->setActiveSection(i); });
 			}
 		}, state->rebuildLifetime);
-		wrap->toggle((list.size() > 1), anim::type::instant);
+		wrap->toggle(list.size() > 1
+			|| (trackActiveFilterAndUnreadAndReorder
+				&& session->localChannels().enabled()), anim::type::instant);
 
 		if (state->reorder) {
 			state->reorder->start();
@@ -528,7 +537,8 @@ not_null<Ui::RpWidget*> AddChatFiltersTabsStrip(
 	};
 	rpl::combine(
 		session->data().chatsFilters().changed(),
-		Data::AmPremiumValue(session) | rpl::to_empty
+		Data::AmPremiumValue(session) | rpl::to_empty,
+		session->localChannels().enabledValue() | rpl::to_empty
 	) | rpl::on_next(rebuild, wrap->lifetime());
 	Core::App().settings().chatFiltersTabsModeValue(
 	) | rpl::on_next([=](ChatsFiltersTabsMode mode) {
@@ -536,10 +546,19 @@ not_null<Ui::RpWidget*> AddChatFiltersTabsStrip(
 		scrollToIndex(slider->activeSection(), anim::type::instant);
 	}, wrap->lifetime());
 	rebuild();
+	if (trackActiveFilterAndUnreadAndReorder) {
+		controller->localChannelsFolderShownValue() | rpl::on_next([=](bool shown) {
+			slider->setActiveSelectionVisible(!shown);
+		}, wrap->lifetime());
+	}
 
 	session->data().chatsFilters().isChatlistChanged(
 	) | rpl::on_next([=](FilterId id) {
-		if (!id || !state->lastFilterId || (id != state->lastFilterId)) {
+		if ((trackActiveFilterAndUnreadAndReorder
+			&& controller->localChannelsFolderShown())
+			|| !id
+			|| !state->lastFilterId
+			|| id != state->lastFilterId) {
 			return;
 		}
 		for (const auto &filter : session->data().chatsFilters().list()) {

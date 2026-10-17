@@ -9,6 +9,7 @@
 
 using "ui/basic.style";
 using "ui/colors.palette";
+using "ui/layers/layers.style";
 using "ui/widgets/widgets.style";
 using "info/info.style";
 using "settings/settings.style";
@@ -191,4 +192,24 @@ chatStickersInfoButton: IconButton(defaultIconButton) {
 	rippleAreaPosition: point(0px, 0px);
 	rippleAreaSize: 28px;
 	ripple: defaultRippleAnimation;
+}
+
+localChannelsFolderHeaderHeight: 48px;
+localChannelsFolderPadding: 12px;
+localChannelsFolderInfo: IconButton(defaultIconButton) {
+	width: 40px;
+	height: 40px;
+	icon: icon {{ "menu/info", windowSubTextFg }};
+	iconOver: icon {{ "menu/info", windowFg }};
+	rippleAreaPosition: point(0px, 0px);
+	rippleAreaSize: 40px;
+	ripple: defaultRippleAnimation;
+}
+localChannelsFolderManage: IconButton(localChannelsFolderInfo) {
+	icon: icon {{ "menu/settings", windowSubTextFg }};
+	iconOver: icon {{ "menu/settings", windowFg }};
+}
+localChannelsBoxInfo: IconButton(boxTitleClose) {
+	icon: icon {{ "menu/info", boxTitleCloseFg }};
+	iconOver: icon {{ "menu/info", boxTitleCloseFgOver }};
 }

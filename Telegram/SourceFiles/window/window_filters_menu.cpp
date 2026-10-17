@@ -7,6 +7,9 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 */
 #include "window/window_filters_menu.h"
 
+#include "ayu/features/local_channels/local_channels.h"
+#include "ayu/ui/boxes/local_channels_box.h"
+
 #include "menu/menu_folder_sort.h"
 #include "menu/menu_mark_as_read.h"
 #include "mainwindow.h"
@@ -167,6 +170,24 @@ void FiltersMenu::setup() {
 		refresh();
 	}, _outer.lifetime());
 
+	_session->session().localChannels().enabledValue()
+		| rpl::skip(1)
+		| rpl::on_next([=] {
+		refresh();
+	}, _outer.lifetime());
+	_session->localChannelsFolderShownValue() | rpl::on_next([=](bool shown) {
+		if (_local) {
+			_local->setActive(shown);
+			if (shown && Ui::ScreenReaderModeActive()) {
+				setListTabStop(_local.get());
+			}
+		}
+		for (const auto &[id, button] : _filters) {
+			button->setActive(!shown
+				&& id == _session->activeChatsFilterCurrent());
+		}
+	}, _outer.lifetime());
+
 	_activeFilterId = _session->activeChatsFilterCurrent();
 	_session->activeChatsFilter(
 	) | rpl::filter([=](FilterId id) {
@@ -320,10 +341,24 @@ void FiltersMenu::moveToFilter(int delta) {
 			current = i;
 		}
 	}
-	applyFilterAt(current + delta, delta);
+	if (_local && _local->hasFocus()) {
+		if (delta > 0) {
+			applyFilterAt(0, 1);
+		}
+	} else if (_local && current == 0 && delta < 0) {
+		_local->setFocus();
+		scrollToButton(_local.get());
+	} else {
+		applyFilterAt(current + delta, delta);
+	}
 }
 
 void FiltersMenu::moveToFilterEdge(int delta) {
+	if (_local && delta > 0) {
+		_local->setFocus();
+		scrollToButton(_local.get());
+		return;
+	}
 	const auto count = int(
 		_session->session().data().chatsFilters().list().size());
 	applyFilterAt((delta > 0) ? 0 : (count - 1), delta);
@@ -348,6 +383,9 @@ void FiltersMenu::setListTabStop(not_null<Ui::SideBarButton*> stop) {
 }
 
 bool FiltersMenu::listFocused() const {
+	if (_local && _local->hasFocus()) {
+		return true;
+	}
 	for (const auto &[id, button] : _filters) {
 		if (button->hasFocus()) {
 			return true;
@@ -361,7 +399,8 @@ void FiltersMenu::refresh() {
 	const auto &settings = AyuSettings::getInstance();
 
 	const auto filters = &_session->session().data().chatsFilters();
-	if (!filters->has() || _ignoreRefresh) {
+	if ((!filters->has() && !_session->session().localChannels().enabled())
+		|| _ignoreRefresh) {
 		return;
 	}
 	const auto oldTop = _scroll.scrollTop();
@@ -369,6 +408,8 @@ void FiltersMenu::refresh() {
 	if (!_list) {
 		setupList();
 	}
+	const auto localFocused = _local && _local->hasFocus();
+	refreshLocal();
 	_reorder->cancel();
 
 	_reorder->clearPinnedIntervals();
@@ -419,7 +460,12 @@ void FiltersMenu::refresh() {
 		if (i == end(_filters)) {
 			i = _filters.find(_activeFilterId);
 		}
-		if (i != end(_filters)) {
+		if (_local && (_session->localChannelsFolderShown() || localFocused)) {
+			setListTabStop(_local.get());
+			if (localFocused) {
+				refocus = _local.get();
+			}
+		} else if (i != end(_filters)) {
 			setListTabStop(i->second.get());
 			// setListTabStop only fixes the Tab order; the std::move above
 			// destroyed the focused button, so Qt also dropped keyboard focus
@@ -441,6 +487,7 @@ void FiltersMenu::refresh() {
 	_scroll.scrollToY(oldTop);
 
 	if (settings.hideAllChatsFolder()
+		&& !_session->localChannelsFolderShown()
 		&& _session->widget()->sessionContent()) {
 		_session->setActiveChatsFilter(filters->lookupId(0));
 	}
@@ -449,6 +496,56 @@ void FiltersMenu::refresh() {
 		refocus->setFocus();
 		scrollToButton(refocus);
 	}
+}
+
+void FiltersMenu::refreshLocal() {
+	if (!_session->session().localChannels().enabled()) {
+		_local = nullptr;
+		return;
+	}
+	_local = prepareButton(
+		_container,
+		-2,
+		{ tr::ayu_LocalChannelsFolder(tr::now, tr::marked) },
+		Ui::FilterIcon::Channels,
+		false,
+		true);
+	const auto raw = _local.get();
+	raw->setIsListItem(true);
+	raw->setActive(_session->localChannelsFolderShown());
+	raw->setAccessibleName(tr::ayu_LocalChannelsFolder(tr::now));
+	raw->setClickedCallback([=] { _session->showLocalChannelsFolder(); });
+	Ui::ScreenReaderModeActiveValue() | rpl::on_next([=](bool active) {
+		raw->setFocusPolicy(active ? Qt::ClickFocus : Qt::NoFocus);
+		if (active && _session->localChannelsFolderShown()) {
+			setListTabStop(raw);
+		}
+	}, raw->lifetime());
+	base::install_event_filter(raw, [=](not_null<QEvent*> event) {
+		if (event->type() == QEvent::FocusIn) {
+			setListTabStop(raw);
+			return base::EventFilterResult::Continue;
+		} else if (event->type() == QEvent::ContextMenu) {
+			_popupMenu = base::make_unique_q<Ui::PopupMenu>(
+				raw,
+				st::popupMenuWithIcons);
+			_popupMenu->addAction(tr::ayu_LocalChannelsManage(tr::now), [=] {
+				Ayu::ShowLocalChannelsBox(_session);
+			}, &st::menuIconEdit);
+			_popupMenu->popup(static_cast<QContextMenuEvent*>(event.get())->globalPos());
+			return base::EventFilterResult::Cancel;
+		} else if (event->type() != QEvent::KeyPress) {
+			return base::EventFilterResult::Continue;
+		}
+		switch (static_cast<QKeyEvent*>(event.get())->key()) {
+		case Qt::Key_Up: break;
+		case Qt::Key_Down: applyFilterAt(0, 1); break;
+		case Qt::Key_Home: moveToFilterEdge(1); break;
+		case Qt::Key_End: moveToFilterEdge(-1); break;
+		default: return base::EventFilterResult::Continue;
+		}
+		return base::EventFilterResult::Cancel;
+	});
 }
 
 void FiltersMenu::setupList() {
@@ -678,7 +775,9 @@ base::unique_qptr<Ui::SideBarButton> FiltersMenu::prepareButton(
 		) | rpl::on_next([=](bool screenReaderActive, bool selected) {
 			if (!screenReaderActive) {
 				raw->setFocusPolicy(Qt::NoFocus);
-			} else if (selected && !listFocused()) {
+			} else if (selected
+				&& !_session->localChannelsFolderShown()
+				&& !listFocused()) {
 				setListTabStop(raw);
 			} else if (raw->focusPolicy() == Qt::NoFocus) {
 				raw->setFocusPolicy(Qt::ClickFocus);
@@ -706,7 +805,8 @@ base::unique_qptr<Ui::SideBarButton> FiltersMenu::prepareButton(
 			return base::EventFilterResult::Cancel;
 		});
 	}
-	raw->setActive(_session->activeChatsFilterCurrent() == id);
+	raw->setActive(!_session->localChannelsFolderShown()
+		&& _session->activeChatsFilterCurrent() == id);
 	raw->setClickedCallback([=] {
 		if (_reordering) {
 			return;
