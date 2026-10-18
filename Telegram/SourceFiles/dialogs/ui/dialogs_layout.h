@@ -77,6 +77,7 @@ struct PaintContext {
 	bool narrow = false;
 	bool displayUnreadInfo = false;
 	bool insideCommunity = false;
+	bool preloadData = true;
 };
 
 extern const char kOptionDialogsMuteIcon[];

@@ -49,7 +49,6 @@ private:
 struct OperationState {
 	mtpRequestId requestId = 0;
 	bool refreshScheduled = false;
-	QString query;
 	int page = 0;
 	LocalChannelOpener opener;
 };
@@ -226,22 +225,11 @@ void FillRows(
 		not_null<Ui::VerticalLayout*> rows,
 		not_null<Ui::GenericBox*> box,
 		not_null<Window::SessionController*> controller,
-		not_null<OperationState*> state,
-		const QString &query) {
+		not_null<OperationState*> state) {
 	const auto weak = base::make_weak(controller);
 	const auto channels = &controller->session().localChannels();
 	rows->clear();
-	if (state->query != query) {
-		state->query = query;
-		state->page = 0;
-	}
-	auto matching = std::vector<LocalChannelEntry>();
-	for (const auto &entry : channels->entries()) {
-		if (entry.username.contains(query, Qt::CaseInsensitive)
-			|| entry.title.contains(query, Qt::CaseInsensitive)) {
-			matching.push_back(entry);
-		}
-	}
+	const auto &matching = channels->entries();
 	const auto pages = std::max(
 		1,
 		(int(matching.size()) + kChannelsPerPage - 1) / kChannelsPerPage);
@@ -288,7 +276,7 @@ void FillRows(
 			state->page += direction;
 			crl::on_main(rows, [=] {
 				if (weak) {
-					FillRows(rows, box, weak.get(), state, query);
+					FillRows(rows, box, weak.get(), state);
 					box->scrollToWidget(rows);
 				}
 			});
@@ -427,10 +415,6 @@ void ShowLocalChannelsBox(not_null<Window::SessionController*> controller) {
 				ExportChannels(box, weak.get());
 			}
 		});
-		const auto search = box->addRow(object_ptr<Ui::InputField>(
-			box,
-			st::defaultInputField,
-			tr::ayu_LocalChannelsSearch()));
 		const auto rows = box->addRow(
 			object_ptr<Ui::VerticalLayout>(box),
 			style::margins());
@@ -446,14 +430,12 @@ void ShowLocalChannelsBox(not_null<Window::SessionController*> controller) {
 						rows,
 						box,
 						weak.get(),
-						state,
-						search->getLastText().trimmed());
+						state);
 				}
 			});
 		};
 		channels->changes() | rpl::on_next(refresh, box->lifetime());
-		search->changes() | rpl::on_next(refresh, box->lifetime());
-		FillRows(rows, box, controller, state, QString());
+		FillRows(rows, box, controller, state);
 		box->boxClosing() | rpl::on_next([=] {
 			state->opener.cancel();
 		}, box->lifetime());

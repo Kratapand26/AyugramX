@@ -4989,6 +4989,9 @@ void Widget::updateControlsGeometry() {
 		_scroll->setGeometry(0, scrollTop, scrollWidth, scrollHeight);
 		if (_localChannelsFolder) {
 			_localChannelsFolder->setGeometry(_scroll->geometry());
+			_localChannelsFolder->setTitleLeft(filterLeft
+				+ st::dialogsFilter.textMargins.left()
+				+ st::dialogsFilter.placeholderMargins.left());
 		}
 		if (_chatsFilterSlideCanvas) {
 			_chatsFilterSlideCanvas->setGeometry(_scroll->geometry());

@@ -4,6 +4,12 @@
 #include "ayu/ui/boxes/local_channels_box.h"
 #include "base/event_filter.h"
 #include "base/weak_ptr.h"
+#include "data/data_changes.h"
+#include "data/data_channel.h"
+#include "data/data_session.h"
+#include "dialogs/ui/dialogs_layout.h"
+#include "dialogs/dialogs_row.h"
+#include "history/history.h"
 #include "lang/lang_keys.h"
 #include "main/main_session.h"
 #include "ui/boxes/confirm_box.h"
@@ -12,9 +18,11 @@
 #include "ui/widgets/scroll_area.h"
 #include "ui/widgets/tooltip.h"
 #include "ui/wrap/vertical_layout.h"
+#include "ui/empty_userpic.h"
 #include "ui/painter.h"
 #include "window/window_session_controller.h"
 
+#include <QtGui/QFocusEvent>
 #include <QtGui/QKeyEvent>
 #include <QtGui/QResizeEvent>
 
@@ -22,17 +30,176 @@
 #include <utility>
 
 #include "styles/style_ayu_styles.h"
+#include "styles/style_dialogs.h"
 #include "styles/style_layers.h"
 #include "styles/style_settings.h"
+#include "styles/style_window.h"
 
 namespace Ayu {
 namespace {
 
 constexpr auto kChannelsPerPage = 50;
 
+class LocalChannelChatRow final : public Ui::RippleButton {
+public:
+	LocalChannelChatRow(
+		QWidget *parent,
+		not_null<Window::SessionController*> controller,
+		LocalChannelEntry entry);
+
+	QString accessibilityName() override;
+	Ui::AccessibilityState accessibilityState() const override;
+
+private:
+	int resizeGetHeight(int width) override;
+	void paintEvent(QPaintEvent *e) override;
+	void focusInEvent(QFocusEvent *e) override;
+	void focusOutEvent(QFocusEvent *e) override;
+	[[nodiscard]] bool active() const;
+
+	const base::weak_ptr<Window::SessionController> _controller;
+	const LocalChannelEntry _entry;
+	Ui::EmptyUserpic _emptyUserpic;
+	History *_history = nullptr;
+	std::unique_ptr<Dialogs::Row> _row;
+
+};
+
+LocalChannelChatRow::LocalChannelChatRow(
+		QWidget *parent,
+		not_null<Window::SessionController*> controller,
+		LocalChannelEntry entry)
+: RippleButton(parent, st::dialogsRipple)
+, _controller(base::make_weak(controller))
+, _entry(std::move(entry))
+, _emptyUserpic(
+	Ui::EmptyUserpic::UserpicColor(Ui::EmptyUserpic::ColorIndex(
+		_entry.id ? _entry.id : qHash(_entry.username))),
+	_entry.title.isEmpty() ? _entry.username : _entry.title) {
+	setIsListItem(true);
+	setFocusPolicy(Qt::StrongFocus);
+	setPointerCursor(true);
+	const auto channel = controller->session().localChannels().cachedChannel(_entry);
+	if (channel) {
+		_history = controller->session().data().history(channel).get();
+		_row = std::make_unique<Dialogs::Row>(Dialogs::Key(_history), 0, 0);
+		_row->recountHeight(1., 0);
+		controller->session().changes().entryUpdates(
+			_history,
+			Data::EntryUpdate::Flag::Repaint | Data::EntryUpdate::Flag::Height
+		) | rpl::on_next([=] { update(); }, lifetime());
+		controller->session().changes().peerUpdates(
+			channel,
+			Data::PeerUpdate::Flag::Name
+				| Data::PeerUpdate::Flag::Photo
+				| Data::PeerUpdate::Flag::Notifications
+				| Data::PeerUpdate::Flag::VerifyInfo
+		) | rpl::on_next([=] {
+			accessibilityNameChanged();
+			update();
+		}, lifetime());
+	}
+	controller->activeChatEntryValue() | rpl::on_next([=] {
+		update();
+	}, lifetime());
+	controller->session().downloaderTaskFinished() | rpl::on_next([=] {
+		update();
+	}, lifetime());
+}
+
+QString LocalChannelChatRow::accessibilityName() {
+	const auto title = _history ? _history->chatListName() : _entry.title;
+	return title.isEmpty()
+		? '@' + _entry.username
+		: title + u" (@"_q + _entry.username + ')';
+}
+
+Ui::AccessibilityState LocalChannelChatRow::accessibilityState() const {
+	auto result = RippleButton::accessibilityState();
+	result.selectable = true;
+	result.selected = active() || hasFocus();
+	return result;
+}
+
+bool LocalChannelChatRow::active() const {
+	return _history
+		&& _controller
+		&& (_controller->activeChatEntryCurrent().key.history() == _history);
+}
+
+int LocalChannelChatRow::resizeGetHeight(int width) {
+	return st::defaultDialogRow.height;
+}
+
+void LocalChannelChatRow::focusInEvent(QFocusEvent *e) {
+	RippleButton::focusInEvent(e);
+	update();
+}
+
+void LocalChannelChatRow::focusOutEvent(QFocusEvent *e) {
+	RippleButton::focusOutEvent(e);
+	update();
+}
+
+void LocalChannelChatRow::paintEvent(QPaintEvent *e) {
+	const auto selected = isOver() || hasFocus() || forceRippled();
+	const auto narrow = (width() < st::columnMinimalWidthLeft / 2);
+	auto p = Painter(this);
+	if (_row && _controller) {
+		Dialogs::Ui::RowPainter::Paint(p, _row.get(), nullptr, {
+			.st = &st::defaultDialogRow,
+			.currentBg = st::dialogsBg,
+			.now = crl::now(),
+			.width = width(),
+			.active = active(),
+			.selected = selected,
+			.paused = _controller->isGifPausedAtLeastFor(
+				Window::GifPauseReason::Any),
+			.narrow = narrow,
+			.preloadData = false,
+		});
+	} else {
+		p.fillRect(rect(), selected ? st::dialogsBgOver : st::dialogsBg);
+		const auto &row = st::defaultDialogRow;
+		_emptyUserpic.paintCircle(
+			p,
+			row.padding.left(),
+			row.padding.top(),
+			width(),
+			row.photoSize);
+		if (!narrow) {
+			const auto available = std::max(
+				0,
+				width() - row.nameLeft - row.padding.right());
+			const auto title = _entry.title.isEmpty()
+				? _entry.username
+				: _entry.title;
+			p.setFont(st::semiboldFont);
+			p.setPen(selected ? st::dialogsNameFgOver : st::dialogsNameFg);
+			p.drawTextLeft(
+				row.nameLeft,
+				row.nameTop,
+				width(),
+				st::semiboldFont->elided(title, available));
+			p.setFont(st::dialogsTextFont);
+			p.setPen(selected ? st::dialogsTextFgOver : st::dialogsTextFg);
+			p.drawTextLeft(
+				row.textLeft,
+				row.textTop,
+				width(),
+				st::dialogsTextFont->elided('@' + _entry.username, available));
+		}
+	}
+	const auto &ripple = active()
+		? st::dialogsRippleBgActive
+		: st::dialogsRippleBg;
+	paintRipple(p, 0, 0, &ripple->c);
+}
+
 } // namespace
 
 struct LocalChannelsFolder::State {
+	base::weak_ptr<Window::SessionController> controller;
 	LocalChannels *channels = nullptr;
 	Ui::RpWidget *header = nullptr;
 	Ui::FlatLabel *title = nullptr;
@@ -41,11 +208,12 @@ struct LocalChannelsFolder::State {
 	Ui::ScrollArea *scroll = nullptr;
 	Ui::VerticalLayout *rows = nullptr;
 	LocalChannelOpener opener;
-	std::vector<QPointer<Ui::SettingsButton>> buttons;
+	std::vector<QPointer<LocalChannelChatRow>> buttons;
 	std::vector<Fn<void()>> actions;
 	QString query;
 	int page = 0;
 	int selected = -1;
+	int titleLeft = 0;
 	bool scheduled = false;
 };
 
@@ -56,6 +224,7 @@ LocalChannelsFolder::LocalChannelsFolder(
 , _state(std::make_unique<State>()) {
 	setFocusPolicy(Qt::StrongFocus);
 	const auto state = _state.get();
+	state->controller = base::make_weak(controller);
 	state->channels = &controller->session().localChannels();
 	state->opener = MakeLocalChannelOpener(this, controller, [] {});
 	state->header = Ui::CreateChild<Ui::RpWidget>(this);
@@ -119,6 +288,13 @@ void LocalChannelsFolder::setQuery(QString query) {
 	}
 }
 
+void LocalChannelsFolder::setTitleLeft(int left) {
+	if (_state->titleLeft != left) {
+		_state->titleLeft = left;
+		updateHeaderGeometry();
+	}
+}
+
 void LocalChannelsFolder::scheduleRefresh() {
 	if (std::exchange(_state->scheduled, true)) {
 		return;
@@ -131,6 +307,9 @@ void LocalChannelsFolder::scheduleRefresh() {
 
 void LocalChannelsFolder::refresh() {
 	const auto state = _state.get();
+	if (!state->controller) {
+		return;
+	}
 	state->buttons.clear();
 	state->actions.clear();
 	state->selected = -1;
@@ -150,13 +329,10 @@ void LocalChannelsFolder::refresh() {
 	const auto last = std::min(first + kChannelsPerPage, int(matching.size()));
 	for (auto i = first; i != last; ++i) {
 		const auto entry = matching[i];
-		const auto label = entry.title.isEmpty()
-			? '@' + entry.username
-			: entry.title + u" (@"_q + entry.username + ')';
-		const auto button = state->rows->add(object_ptr<Ui::SettingsButton>(
+		const auto button = state->rows->add(object_ptr<LocalChannelChatRow>(
 			state->rows,
-			rpl::single(label),
-			st::settingsButtonNoIcon));
+			state->controller.get(),
+			entry));
 		const auto action = [=] { state->opener.open(entry); };
 		button->setClickedCallback(action);
 		button->setFocusPolicy(Qt::StrongFocus);
@@ -248,6 +424,16 @@ QString LocalChannelsFolder::accessibilityName() {
 
 void LocalChannelsFolder::resizeEvent(QResizeEvent *e) {
 	RpWidget::resizeEvent(e);
+	updateHeaderGeometry();
+	const auto headerHeight = st::localChannelsFolderHeaderHeight;
+	_state->scroll->setGeometry(
+		0,
+		headerHeight,
+		width(),
+		std::max(0, height() - headerHeight));
+}
+
+void LocalChannelsFolder::updateHeaderGeometry() {
 	const auto state = _state.get();
 	const auto headerHeight = st::localChannelsFolderHeaderHeight;
 	const auto padding = st::localChannelsFolderPadding;
@@ -266,18 +452,14 @@ void LocalChannelsFolder::resizeEvent(QResizeEvent *e) {
 		width());
 	const auto titleWidth = std::max(
 		0,
-		width() - 2 * padding - infoWidth - state->manage->width());
+		width() - state->titleLeft - padding
+			- infoWidth - state->manage->width());
 	state->title->setVisible(titleWidth >= state->title->textMaxWidth());
 	state->title->resizeToWidth(titleWidth);
 	state->title->moveToLeft(
-		padding,
+		state->titleLeft,
 		(headerHeight - state->title->height()) / 2,
 		width());
-	state->scroll->setGeometry(
-		0,
-		headerHeight,
-		width(),
-		std::max(0, height() - headerHeight));
 }
 
 } // namespace Ayu

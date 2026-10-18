@@ -16,6 +16,7 @@ public:
 	~LocalChannelsFolder() override;
 
 	void setQuery(QString query);
+	void setTitleLeft(int left);
 	void moveSelection(int delta);
 	void activateSelected();
 	QAccessible::Role accessibilityRole() override;
@@ -23,6 +24,7 @@ public:
 
 private:
 	void resizeEvent(QResizeEvent *e) override;
+	void updateHeaderGeometry();
 	void scheduleRefresh();
 	void refresh();
 
