@@ -9649,6 +9649,17 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "ayu_ChatStickersEnableFirst" = "Enable Chat Stickers for this account first.";
 "ayu_ChatStickersAbout" = "Load Old checks older messages; Load New checks recent messages. Results are saved locally. Click a sticker to open its pack, or right-click for more actions.";
 "ayu_ChatStickersInfo" = "About Chat Stickers";
+"ayu_ChatStickersOptions" = "Chat Stickers options";
+"ayu_ChatStickersSearch" = "Search emoji or pack name";
+"ayu_ChatStickersNoMatches" = "No matches in collected stickers. Try another emoji or pack name.";
+"ayu_ChatStickersNoPacks" = "No sticker packs in the collected messages.";
+"ayu_ChatStickersStickersTab" = "Stickers";
+"ayu_ChatStickersPacksTab" = "Packs";
+"ayu_ChatStickersSort" = "Sort stickers";
+"ayu_ChatStickersFound#one" = "{count} sticker";
+"ayu_ChatStickersFound#other" = "{count} stickers";
+"ayu_ChatStickersPacksFound#one" = "{count} pack";
+"ayu_ChatStickersPacksFound#other" = "{count} packs";
 "ayu_ChatStickersRestoring" = "Loading saved results…";
 "ayu_ChatStickersSaveFailed" = "Could not save results to the local cache.";
 "ayu_ChatStickersCached" = "Cached results";

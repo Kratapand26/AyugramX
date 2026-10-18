@@ -171,27 +171,105 @@ forwarderMultilineInput: InputField(forwarderInputField) {
 }
 
 chatStickersBoxWidth: 520px;
-chatStickersCellWidth: 104px;
+chatStickersBodyPadding: margins(12px, 8px, 12px, 8px);
+chatStickersContextPadding: margins(24px, 0px, 24px, 6px);
+chatStickersControlsPadding: margins(24px, 0px, 24px, 8px);
+chatStickersContext: FlatLabel(defaultFlatLabel) {
+	style: TextStyle(defaultTextStyle) {
+		font: font(12px);
+	}
+	textFg: windowSubTextFg;
+	maxHeight: 18px;
+}
+
+chatStickersCellWidth: 96px;
 chatStickersCellHeight: 120px;
+chatStickersPackCellHeight: 144px;
 chatStickersPreviewSize: 80px;
 chatStickersListHeight: 80px;
 chatStickersListPreviewSize: 56px;
-chatStickersCellPadding: 12px;
+chatStickersCellPadding: 8px;
+chatStickersCellInset: 3px;
+chatStickersCellRadius: 10px;
 chatStickersTextGap: 4px;
-chatStickersToolbarPadding: 8px;
-chatStickersToolbarGap: 16px;
-chatStickersEmptyHeight: 96px;
+chatStickersBadgeFont: font(11px semibold);
+chatStickersBadgeHeight: 20px;
+chatStickersBadgePadding: 8px;
+chatStickersBadgeRadius: 10px;
+chatStickersToolbarGap: 8px;
+chatStickersTabsMinWidth: 160px;
+chatStickersSortMaxWidth: 176px;
+chatStickersEmptyHeight: 144px;
+chatStickersEmptyTextWidth: 280px;
+chatStickersEmptyGap: 12px;
+chatStickersEmptyIcon: icon {{ "menu/stickers", windowSubTextFg }};
 chatStickersPlaceholderFont: font(24px);
 
-chatStickersStatusPadding: margins(24px, 8px, 24px, 0px);
-chatStickersInfoButton: IconButton(defaultIconButton) {
-	width: 28px;
-	height: 28px;
-	icon: icon {{ "menu/info", windowSubTextFg }};
-	iconOver: icon {{ "menu/info", windowFg }};
+chatStickersTabs: SettingsSlider(defaultTabsSlider) {
+	height: 40px;
+	barTop: 37px;
+}
+chatStickersSort: RoundButton(defaultLightButton) {
+	height: 32px;
+	width: -20px;
+	radius: 16px;
+	textTop: 7px;
+	textBg: windowBgOver;
+	icon: icon {{ "info/edit/expand_arrow_small", lightButtonFg }};
+	iconOver: icon {{ "info/edit/expand_arrow_small", lightButtonFgOver }};
+	iconPosition: point(-6px, 13px);
+	style: TextStyle(defaultTextStyle) {
+		font: font(12px);
+	}
+}
+chatStickersViewButton: IconButton(defaultIconButton) {
+	width: 32px;
+	height: 32px;
 	rippleAreaPosition: point(0px, 0px);
-	rippleAreaSize: 28px;
+	rippleAreaSize: 32px;
 	ripple: defaultRippleAnimation;
+}
+chatStickersGrid: IconButton(chatStickersViewButton) {
+	icon: icon {{ "ayu/chat_stickers_grid", windowSubTextFg }};
+	iconOver: icon {{ "ayu/chat_stickers_grid", windowFg }};
+}
+chatStickersList: IconButton(chatStickersViewButton) {
+	icon: icon {{ "ayu/chat_stickers_list", windowSubTextFg }};
+	iconOver: icon {{ "ayu/chat_stickers_list", windowFg }};
+}
+chatStickersBoxInfo: IconButton(boxTitleClose) {
+	iconPosition: point(-1px, 13px);
+	icon: icon {{ "menu/info", boxTitleCloseFg }};
+	iconOver: icon {{ "menu/info", boxTitleCloseFgOver }};
+}
+
+chatStickersSearchInput: InputField(defaultInputField) {
+	textMargins: margins(36px, 10px, 40px, 8px);
+	placeholderScale: 0.;
+	heightMin: 40px;
+	heightMax: 40px;
+	textBg: windowBgOver;
+	textBgActive: windowBgOver;
+	border: 0px;
+	borderActive: 0px;
+	borderRadius: 20px;
+}
+chatStickersSearchIcon: IconButton(defaultIconButton) {
+	width: 36px;
+	height: 40px;
+	icon: icon {{ "box_search", windowSubTextFg }};
+	iconOver: icon {{ "box_search", windowSubTextFg }};
+}
+chatStickersSearchClear: IconButton(chatStickersSearchIcon) {
+	icon: boxTitleCloseIcon;
+	iconOver: boxTitleCloseIconOver;
+}
+
+chatStickersStatusPadding: margins(24px, 4px, 24px, 0px);
+chatStickersStatusFont: font(12px);
+chatStickersStatusHeight: 28px;
+chatStickersLoading: InfiniteRadialAnimation(boxLoadingAnimation) {
+	size: size(16px, 16px);
 }
 
 localChannelsFolderHeaderHeight: 48px;
