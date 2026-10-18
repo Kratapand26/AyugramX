@@ -611,6 +611,7 @@ void ShowChatStickersBox(
 	const auto cache = stickers->cache(peer, topicRootId);
 	controller->show(Box([=](not_null<Ui::GenericBox*> box) {
 		box->setTitle(tr::ayu_ChatStickersTitle());
+		box->addTopButton(st::boxTitleClose, [=] { box->closeBox(); });
 		box->setWidth(st::chatStickersBoxWidth);
 		box->setMaxHeight(st::boxMaxListHeight);
 		const auto state = box->lifetime().make_state<BrowserState>();
@@ -639,7 +640,6 @@ void ShowChatStickersBox(
 			bottom,
 			QString(),
 			st::boxLabel), st::chatStickersStatusPadding);
-		box->addButton(tr::lng_close(), [=] { box->closeBox(); });
 		const auto loadNew = box->addButton(tr::ayu_ChatStickersRefresh());
 		const auto loadOld = box->addButton(tr::ayu_ChatStickersLoadMore());
 		const auto update = [=] {
