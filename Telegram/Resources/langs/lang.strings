@@ -9650,6 +9650,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "ayu_ChatStickersLoading" = "Loading…";
 "ayu_ChatStickersRefresh" = "Load New";
 "ayu_ChatStickersBusy" = "Please wait a moment before loading another page.";
+"ayu_ChatStickersCooldown" = "Ready in {duration}";
 "ayu_ChatStickersWait" = "Telegram asked you to wait {duration} before another history request.";
 "ayu_ChatStickersUnavailable" = "Could not load this history page. Check your connection and chat access, then try again.";
 "ayu_ChatStickersOpenPack" = "Open sticker pack";

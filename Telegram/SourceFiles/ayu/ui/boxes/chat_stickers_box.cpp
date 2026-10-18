@@ -293,9 +293,12 @@ void StickerToolbar::setOrder(StickerOrder order) {
 int StickerToolbar::resizeGetHeight(int width) {
 	const auto gap = st::chatStickersToolbarGap;
 	const auto viewsWidth = grid->width() + list->width();
-	sort->setFullWidth(std::min(
+	sort->setFullWidth(0);
+	sort->setFullWidth(std::min({
+		sort->width(),
 		st::chatStickersSortMaxWidth,
-		std::max(0, width - viewsWidth - gap)));
+		std::max(0, width - viewsWidth - gap),
+	}));
 	const auto controlsWidth = sort->width() + gap + viewsWidth;
 	const auto oneRow = (width >= st::chatStickersTabsMinWidth
 		+ gap + controlsWidth);
@@ -1011,20 +1014,24 @@ void ShowChatStickersBox(
 		const auto loadOld = box->addButton(tr::ayu_ChatStickersLoadMore());
 		const auto update = [=] {
 			const auto loading = stickers->loading(cache);
+			const auto ready = stickers->canRequest();
+			const auto waiting = stickers->requestStatus();
 			results->refresh(
 				state->order,
 				state->grid,
 				state->packs,
 				search->field->getLastText());
 			loadOld->setEnabled(cache->loaded
-				&& !loading
+				&& ready
 				&& !cache->finished
 				&& !cache->data.full());
-			loadNew->setEnabled(cache->loaded && !loading);
+			loadNew->setEnabled(cache->loaded && ready);
 			const auto detail = !cache->loaded
 				? tr::ayu_ChatStickersRestoring(tr::now)
 				: loading
 				? tr::ayu_ChatStickersLoading(tr::now)
+				: !waiting.isEmpty()
+				? waiting
 				: cache->saveFailed
 				? tr::ayu_ChatStickersSaveFailed(tr::now)
 				: cache->data.full()
@@ -1054,7 +1061,7 @@ void ShowChatStickersBox(
 			toolbar->resizeToWidth(toolbar->width());
 		};
 		const auto requestPage = [=](bool refresh) {
-			if (!cache->loaded || stickers->loading(cache)) {
+			if (!cache->loaded || !stickers->canRequest()) {
 				return;
 			}
 			const auto done = crl::guard(box, [=](QString error) {

@@ -45,6 +45,8 @@ public:
 	[[nodiscard]] rpl::producer<bool> enabledValue() const;
 	void setEnabled(bool enabled);
 	[[nodiscard]] rpl::producer<> changes() const;
+	[[nodiscard]] bool canRequest() const;
+	[[nodiscard]] QString requestStatus() const;
 	[[nodiscard]] std::shared_ptr<ChatStickersCache> cache(
 		not_null<PeerData*> peer,
 		MsgId topicRootId);
@@ -92,6 +94,9 @@ private:
 		const MTPmessages_Messages &result,
 		bool refresh);
 	[[nodiscard]] QString waitText() const;
+	[[nodiscard]] crl::time requestWait() const;
+	void postponeRequests();
+	void updateRequestTimer();
 
 	const not_null<Main::Session*> _session;
 	rpl::variable<bool> _enabled = false;
@@ -103,6 +108,7 @@ private:
 	mtpRequestId _requestId = 0;
 	bool _stopping = false;
 	base::Timer _saveTimer;
+	base::Timer _requestTimer;
 	MTP::Sender _api;
 	rpl::lifetime _lifetime;
 

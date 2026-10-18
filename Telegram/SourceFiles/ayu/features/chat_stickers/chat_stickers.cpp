@@ -34,7 +34,7 @@ constexpr auto kEnabledPref = "ayu_chat_stickers_enabled"_cs;
 constexpr auto kRetryAtPref = "ayu_chat_stickers_retry_at"_cs;
 constexpr auto kCacheLimit = 8;
 constexpr auto kPageSize = 100;
-constexpr auto kRequestInterval = crl::time(1000);
+constexpr auto kRequestInterval = crl::time(2000);
 constexpr auto kSaveDelay = crl::time(500);
 constexpr auto kRestoreBatch = 128;
 
@@ -70,8 +70,13 @@ ChatStickers::ChatStickers(not_null<Main::Session*> session)
 		save(cache);
 	}
 })
+, _requestTimer([=] {
+	updateRequestTimer();
+	_changes.fire({});
+})
 , _api(&session->mtp()) {
 	_retryAt = session->local().readPref<QString>(kRetryAtPref).toLongLong();
+	updateRequestTimer();
 	_session->changes().messageUpdates(
 		Data::MessageUpdate::Flag::NewAdded
 		| Data::MessageUpdate::Flag::Edited
@@ -109,6 +114,7 @@ ChatStickers::ChatStickers(not_null<Main::Session*> session)
 			save(cache, true);
 		}
 		_stopping = true;
+		_requestTimer.cancel();
 	}, _lifetime);
 }
 
@@ -138,6 +144,46 @@ void ChatStickers::setEnabled(bool enabled) {
 
 rpl::producer<> ChatStickers::changes() const {
 	return _changes.events();
+}
+
+bool ChatStickers::canRequest() const {
+	return !_stopping && enabled() && !_requestId && !requestWait();
+}
+
+QString ChatStickers::requestStatus() const {
+	if (_retryAt > base::unixtime::now()) {
+		return waitText();
+	} else if (_requestId) {
+		return tr::ayu_ChatStickersLoading(tr::now);
+	} else if (const auto wait = requestWait()) {
+		return tr::ayu_ChatStickersCooldown(
+			tr::now,
+			lt_duration,
+			Ui::FormatDurationWords((wait + 999) / 1000));
+	}
+	return {};
+}
+
+crl::time ChatStickers::requestWait() const {
+	return std::max<crl::time>({
+		crl::time(0),
+		_nextRequestAt - crl::now(),
+		(_retryAt - int64(base::unixtime::now())) * crl::time(1000),
+	});
+}
+
+void ChatStickers::postponeRequests() {
+	_nextRequestAt = crl::now() + kRequestInterval;
+	updateRequestTimer();
+}
+
+void ChatStickers::updateRequestTimer() {
+	_requestTimer.cancel();
+	if (const auto wait = requestWait()) {
+		_requestTimer.callOnce(std::min(
+			wait,
+			crl::time(std::numeric_limits<int>::max())));
+	}
 }
 
 std::shared_ptr<ChatStickersCache> ChatStickers::cache(
@@ -267,7 +313,7 @@ mtpRequestId ChatStickers::requestPage(
 		done(tr::ayu_ChatStickersBusy(tr::now));
 		return 0;
 	}
-	_nextRequestAt = crl::now() + kRequestInterval;
+	postponeRequests();
 	_active = cache;
 	const auto peer = _session->data().peer(cache->peerId);
 	const auto generation = cache->generation;
@@ -277,6 +323,7 @@ mtpRequestId ChatStickers::requestPage(
 		}
 		_requestId = 0;
 		_active = nullptr;
+		postponeRequests();
 		applyPage(cache.get(), result, refresh);
 		markDirty(cache.get());
 		flush(cache);
@@ -300,6 +347,7 @@ mtpRequestId ChatStickers::requestPage(
 		} else if (!MTP::IgnoreError(error)) {
 			text = tr::ayu_ChatStickersUnavailable(tr::now);
 		}
+		postponeRequests();
 		_changes.fire({});
 		done(text);
 	};
@@ -401,6 +449,7 @@ void ChatStickers::cancel(mtpRequestId requestId) {
 	if (requestId && requestId == _requestId) {
 		_api.request(base::take(_requestId)).cancel();
 		_active = nullptr;
+		postponeRequests();
 		_changes.fire({});
 	}
 }

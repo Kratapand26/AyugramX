@@ -213,11 +213,14 @@ chatStickersSort: RoundButton(defaultLightButton) {
 	height: 32px;
 	width: -20px;
 	radius: 16px;
-	textTop: 7px;
+	textTop: 8px;
+	textFg: windowFg;
+	textFgOver: windowFg;
 	textBg: windowBgOver;
-	icon: icon {{ "info/edit/expand_arrow_small", lightButtonFg }};
-	iconOver: icon {{ "info/edit/expand_arrow_small", lightButtonFgOver }};
-	iconPosition: point(-6px, 13px);
+	textBgOver: windowBgRipple;
+	icon: icon {{ "info/edit/expand_arrow_small", windowSubTextFg }};
+	iconOver: icon {{ "info/edit/expand_arrow_small", windowFg }};
+	iconPosition: point(-6px, 4px);
 	style: TextStyle(defaultTextStyle) {
 		font: font(12px);
 	}
@@ -244,19 +247,24 @@ chatStickersBoxInfo: IconButton(boxTitleClose) {
 }
 
 chatStickersSearchInput: InputField(defaultInputField) {
-	textMargins: margins(36px, 10px, 40px, 8px);
+	textMargins: margins(36px, 8px, 36px, 6px);
 	placeholderScale: 0.;
-	heightMin: 40px;
-	heightMax: 40px;
+	placeholderFont: normalFont;
+	placeholderFgActive: windowSubTextFg;
+	heightMin: 36px;
+	heightMax: 36px;
 	textBg: windowBgOver;
 	textBgActive: windowBgOver;
-	border: 0px;
-	borderActive: 0px;
-	borderRadius: 20px;
+	border: 1px;
+	borderActive: 1px;
+	borderFg: windowBgOver;
+	borderFgActive: windowBgRipple;
+	borderRadius: 18px;
+	style: defaultTextStyle;
 }
 chatStickersSearchIcon: IconButton(defaultIconButton) {
 	width: 36px;
-	height: 40px;
+	height: 36px;
 	icon: icon {{ "box_search", windowSubTextFg }};
 	iconOver: icon {{ "box_search", windowSubTextFg }};
 }
