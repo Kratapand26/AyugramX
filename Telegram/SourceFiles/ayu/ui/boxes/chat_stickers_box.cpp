@@ -35,7 +35,6 @@
 #include "styles/style_ayu_styles.h"
 #include "styles/style_layers.h"
 #include "styles/style_menu_icons.h"
-#include "styles/style_settings.h"
 
 namespace Ayu {
 namespace {
@@ -596,7 +595,6 @@ struct BrowserState {
 	bool packs = false;
 	bool scheduled = false;
 	base::unique_qptr<Ui::PopupMenu> menu;
-	QPointer<Ui::RoundButton> refresh;
 };
 
 } // namespace
@@ -641,25 +639,20 @@ void ShowChatStickersBox(
 			bottom,
 			QString(),
 			st::boxLabel), st::chatStickersStatusPadding);
-		const auto loadText = box->lifetime().make_state<rpl::variable<QString>>();
-		const auto load = bottom->add(object_ptr<Ui::SettingsButton>(
-			bottom,
-			loadText->value(),
-			st::settingsButtonNoIcon));
+		box->addButton(tr::lng_close(), [=] { box->closeBox(); });
+		const auto loadNew = box->addButton(tr::ayu_ChatStickersRefresh());
+		const auto loadOld = box->addButton(tr::ayu_ChatStickersLoadMore());
 		const auto update = [=] {
 			const auto loading = stickers->loading(cache);
-			*loadText = loading
-				? tr::ayu_ChatStickersLoading(tr::now)
-				: tr::ayu_ChatStickersLoadMore(tr::now);
-			load->setEnabled(cache->loaded
+			loadOld->setEnabled(cache->loaded
 				&& !loading
 				&& !cache->finished
 				&& !cache->data.full());
-			if (state->refresh) {
-				state->refresh->setEnabled(cache->loaded && !loading);
-			}
+			loadNew->setEnabled(cache->loaded && !loading);
 			status->setText(!cache->loaded
 				? tr::ayu_ChatStickersRestoring(tr::now)
+				: loading
+				? tr::ayu_ChatStickersLoading(tr::now)
 				: cache->saveFailed
 				? tr::ayu_ChatStickersSaveFailed(tr::now)
 				: cache->data.full()
@@ -697,7 +690,11 @@ void ShowChatStickersBox(
 				: stickers->loadMore(cache, done);
 			update();
 		};
-		load->setClickedCallback([=] { requestPage(false); });
+		loadOld->setClickedCallback([=] { requestPage(false); });
+		loadNew->setClickedCallback([=] {
+			requestPage(true);
+			box->scrollToY(0);
+		});
 		toolbar->view->setClickedCallback([=] {
 			state->grid = !state->grid;
 			controller->session().local().writePref<QString>(
@@ -753,11 +750,6 @@ void ShowChatStickersBox(
 			stickers->cancel(state->requestId);
 			stickers->flush(cache);
 		}, box->lifetime());
-		box->addButton(tr::lng_close(), [=] { box->closeBox(); });
-		state->refresh = box->addButton(tr::ayu_ChatStickersRefresh(), [=] {
-			requestPage(true);
-			box->scrollToY(0);
-		});
 		box->addLeftButton(tr::ayu_ChatStickersClear(), [=] {
 			if (!weak) {
 				return;

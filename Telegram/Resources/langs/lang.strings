@@ -9647,7 +9647,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "ayu_ChatStickersTitle" = "Chat Stickers";
 "ayu_ChatStickersEnable" = "Enable Chat Stickers for this account";
 "ayu_ChatStickersEnableFirst" = "Enable Chat Stickers for this account first.";
-"ayu_ChatStickersAbout" = "Saved stickers and scan progress stay on this device, separately for each account, chat and topic. Load more checks 100 older messages. Refresh checks the latest 100 messages and keeps your older scan position. Nothing scans in the background. Counts cover collected messages only.\n\nClick a sticker to open its pack; right-click for favorites, Save As or the original message. Clear cache resets this chat or topic. Messages already loaded by the app may appear again after clearing. To clear results for all chats in this account, select Chat Stickers in Settings > Advanced > Manage Local Storage. Downloaded sticker files are separate. Normal cache size and age limits apply.";
+"ayu_ChatStickersAbout" = "Load Old checks older messages; Load New checks recent messages. Results are saved locally. Click a sticker to open its pack, or right-click for more actions.";
 "ayu_ChatStickersInfo" = "About Chat Stickers";
 "ayu_ChatStickersRestoring" = "Loading saved results…";
 "ayu_ChatStickersSaveFailed" = "Could not save results to the local cache.";
@@ -9655,7 +9655,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "ayu_ChatStickersClear" = "Clear cache";
 "ayu_ChatStickersClearTopic" = "Clear saved sticker results and scan progress for this topic? Downloaded sticker files will be kept.";
 "ayu_ChatStickersClearChat" = "Clear saved sticker results and scan progress for this chat? Downloaded sticker files will be kept.";
-"ayu_ChatStickersEmpty" = "No stickers found yet. Use Load more to check older messages.";
+"ayu_ChatStickersEmpty" = "No stickers found yet. Use Load Old to check older messages.";
 "ayu_ChatStickersGrid" = "Grid view";
 "ayu_ChatStickersList" = "List view";
 "ayu_ChatStickersNewest" = "Newest first";
@@ -9670,9 +9670,9 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 "ayu_ChatStickersScanned#other" = "{count} messages checked";
 "ayu_ChatStickersFinished" = "History scanned";
 "ayu_ChatStickersFull" = "Result limit reached. Clear cache to start again.";
-"ayu_ChatStickersLoadMore" = "Load more";
+"ayu_ChatStickersLoadMore" = "Load Old";
 "ayu_ChatStickersLoading" = "Loading…";
-"ayu_ChatStickersRefresh" = "Refresh";
+"ayu_ChatStickersRefresh" = "Load New";
 "ayu_ChatStickersBusy" = "Please wait a moment before loading another page.";
 "ayu_ChatStickersWait" = "Telegram asked you to wait {duration} before another history request.";
 "ayu_ChatStickersUnavailable" = "Could not load this history page. Check your connection and chat access, then try again.";
