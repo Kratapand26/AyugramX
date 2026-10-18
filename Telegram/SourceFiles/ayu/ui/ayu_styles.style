@@ -196,20 +196,18 @@ chatStickersInfoButton: IconButton(defaultIconButton) {
 
 localChannelsFolderHeaderHeight: 48px;
 localChannelsFolderPadding: 12px;
-localChannelsFolderInfo: IconButton(defaultIconButton) {
+localChannelsFolderManage: IconButton(defaultIconButton) {
 	width: 40px;
 	height: 40px;
-	icon: icon {{ "menu/info", windowSubTextFg }};
-	iconOver: icon {{ "menu/info", windowFg }};
+	icon: icon {{ "menu/settings", windowSubTextFg }};
+	iconOver: icon {{ "menu/settings", windowFg }};
 	rippleAreaPosition: point(0px, 0px);
 	rippleAreaSize: 40px;
 	ripple: defaultRippleAnimation;
 }
-localChannelsFolderManage: IconButton(localChannelsFolderInfo) {
-	icon: icon {{ "menu/settings", windowSubTextFg }};
-	iconOver: icon {{ "menu/settings", windowFg }};
-}
 localChannelsBoxInfo: IconButton(boxTitleClose) {
+	iconPosition: point(-1px, 13px);
+	rippleAreaPosition: point(4px, 5px);
 	icon: icon {{ "menu/info", boxTitleCloseFg }};
 	iconOver: icon {{ "menu/info", boxTitleCloseFgOver }};
 }

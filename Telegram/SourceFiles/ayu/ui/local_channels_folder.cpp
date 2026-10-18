@@ -12,7 +12,6 @@
 #include "history/history.h"
 #include "lang/lang_keys.h"
 #include "main/main_session.h"
-#include "ui/boxes/confirm_box.h"
 #include "ui/widgets/buttons.h"
 #include "ui/widgets/labels.h"
 #include "ui/widgets/scroll_area.h"
@@ -204,7 +203,6 @@ struct LocalChannelsFolder::State {
 	Ui::RpWidget *header = nullptr;
 	Ui::FlatLabel *title = nullptr;
 	Ui::IconButton *manage = nullptr;
-	Ui::IconButton *info = nullptr;
 	Ui::ScrollArea *scroll = nullptr;
 	Ui::VerticalLayout *rows = nullptr;
 	LocalChannelOpener opener;
@@ -235,28 +233,15 @@ LocalChannelsFolder::LocalChannelsFolder(
 	state->manage = Ui::CreateChild<Ui::IconButton>(
 		state->header,
 		st::localChannelsFolderManage);
-	state->info = Ui::CreateChild<Ui::IconButton>(
-		state->header,
-		st::localChannelsFolderInfo);
 	state->manage->setAccessibleName(tr::ayu_LocalChannelsManage(tr::now));
-	state->info->setAccessibleName(tr::ayu_LocalChannelsInfo(tr::now));
 	state->manage->setFocusPolicy(Qt::StrongFocus);
-	state->info->setFocusPolicy(Qt::StrongFocus);
 	Ui::InstallTooltip(state->manage, [] {
 		return tr::ayu_LocalChannelsManage(tr::now);
-	});
-	Ui::InstallTooltip(state->info, [] {
-		return tr::ayu_LocalChannelsAbout(tr::now);
 	});
 	const auto weak = base::make_weak(controller);
 	state->manage->setClickedCallback([=] {
 		if (weak) {
 			ShowLocalChannelsBox(weak.get());
-		}
-	});
-	state->info->setClickedCallback([=] {
-		if (weak) {
-			weak->show(Ui::MakeInformBox(tr::ayu_LocalChannelsAbout(tr::now)));
 		}
 	});
 	state->scroll = Ui::CreateChild<Ui::ScrollArea>(this);
@@ -437,23 +422,15 @@ void LocalChannelsFolder::updateHeaderGeometry() {
 	const auto state = _state.get();
 	const auto headerHeight = st::localChannelsFolderHeaderHeight;
 	const auto padding = st::localChannelsFolderPadding;
-	const auto showInfo = (width()
-		>= 2 * padding + state->info->width() + state->manage->width());
-	state->info->setVisible(showInfo);
-	const auto infoWidth = showInfo ? state->info->width() : 0;
 	state->header->setGeometry(0, 0, width(), headerHeight);
-	state->info->moveToRight(
-		padding,
-		(headerHeight - state->info->height()) / 2,
-		width());
 	state->manage->moveToRight(
-		padding + infoWidth,
+		padding,
 		(headerHeight - state->manage->height()) / 2,
 		width());
 	const auto titleWidth = std::max(
 		0,
 		width() - state->titleLeft - padding
-			- infoWidth - state->manage->width());
+			- state->manage->width());
 	state->title->setVisible(titleWidth >= state->title->textMaxWidth());
 	state->title->resizeToWidth(titleWidth);
 	state->title->moveToLeft(

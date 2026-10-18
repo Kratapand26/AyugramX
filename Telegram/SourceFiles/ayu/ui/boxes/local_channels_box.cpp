@@ -370,19 +370,6 @@ void ShowLocalChannelsBox(not_null<Window::SessionController*> controller) {
 		Ui::InstallTooltip(info.data(), [] {
 			return tr::ayu_LocalChannelsAbout(tr::now);
 		});
-		const auto toggle = box->addRow(
-			object_ptr<Ui::SettingsButton>(
-				box,
-				tr::ayu_LocalChannelsEnable(),
-				st::settingsButtonNoIcon),
-			style::margins());
-		toggle->toggleOn(channels->enabledValue());
-		toggle->toggledChanges() | rpl::on_next([=](bool enabled) {
-			if (!enabled) {
-				state->opener.cancel();
-			}
-			channels->setEnabled(enabled);
-		}, box->lifetime());
 		Settings::AddButtonWithIcon(
 			box->verticalLayout(),
 			tr::ayu_LocalChannelsAdd(),
