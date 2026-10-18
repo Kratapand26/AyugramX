@@ -667,10 +667,6 @@ public:
 	[[nodiscard]] rpl::producer<bool> enoughSpaceForFiltersValue() const;
 	[[nodiscard]] rpl::producer<FilterId> activeChatsFilter() const;
 	[[nodiscard]] FilterId activeChatsFilterCurrent() const;
-	[[nodiscard]] bool localChannelsFolderShown() const;
-	[[nodiscard]] rpl::producer<bool> localChannelsFolderShownValue() const;
-	void showLocalChannelsFolder();
-	void hideLocalChannelsFolder();
 	void setActiveChatsFilter(
 		FilterId id,
 		const SectionShow &params = SectionShow::Way::ClearStack);
@@ -885,7 +881,6 @@ private:
 	base::Timer _invitePeekTimer;
 
 	rpl::variable<FilterId> _activeChatsFilter;
-	rpl::variable<bool> _localChannelsFolderShown = false;
 
 	rpl::variable<int> _connectingBottomSkip;
 

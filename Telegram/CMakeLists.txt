@@ -211,10 +211,6 @@ set(ayugram_files
         ayu/ui/boxes/forwarder_box.h
         ayu/ui/boxes/chat_stickers_box.cpp
         ayu/ui/boxes/chat_stickers_box.h
-        ayu/ui/boxes/local_channels_box.cpp
-        ayu/ui/boxes/local_channels_box.h
-        ayu/ui/local_channels_folder.cpp
-        ayu/ui/local_channels_folder.h
         ayu/ui/components/image_view.cpp
         ayu/ui/components/image_view.h
         ayu/ui/components/icon_picker.cpp
@@ -261,10 +257,6 @@ set(ayugram_files
         ayu/features/chat_stickers/chat_stickers_cache.h
         ayu/features/chat_stickers/chat_stickers_data.cpp
         ayu/features/chat_stickers/chat_stickers_data.h
-        ayu/features/local_channels/local_channels.cpp
-        ayu/features/local_channels/local_channels.h
-        ayu/features/local_channels/local_channels_data.cpp
-        ayu/features/local_channels/local_channels_data.h
         ayu/features/translator/ayu_translator.cpp
         ayu/features/translator/ayu_translator.h
         ayu/features/translator/ayu_translate_provider.cpp

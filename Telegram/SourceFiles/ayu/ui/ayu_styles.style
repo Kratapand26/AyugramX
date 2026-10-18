@@ -271,21 +271,3 @@ chatStickersStatusHeight: 28px;
 chatStickersLoading: InfiniteRadialAnimation(boxLoadingAnimation) {
 	size: size(16px, 16px);
 }
-
-localChannelsFolderHeaderHeight: 48px;
-localChannelsFolderPadding: 12px;
-localChannelsFolderManage: IconButton(defaultIconButton) {
-	width: 40px;
-	height: 40px;
-	icon: icon {{ "menu/settings", windowSubTextFg }};
-	iconOver: icon {{ "menu/settings", windowFg }};
-	rippleAreaPosition: point(0px, 0px);
-	rippleAreaSize: 40px;
-	ripple: defaultRippleAnimation;
-}
-localChannelsBoxInfo: IconButton(boxTitleClose) {
-	iconPosition: point(-1px, 13px);
-	rippleAreaPosition: point(4px, 5px);
-	icon: icon {{ "menu/info", boxTitleCloseFg }};
-	iconOver: icon {{ "menu/info", boxTitleCloseFgOver }};
-}

@@ -41,7 +41,6 @@ public:
 	void setTabsMode(ChatsFiltersTabsMode mode);
 	void setSectionIcons(std::vector<const style::internal::Icon*> icons);
 	void setLockedFrom(int index);
-	void setActiveSelectionVisible(bool visible);
 	[[nodiscard]] int lockedFrom() const {
 		return _lockedFrom;
 	}
@@ -109,7 +108,6 @@ private:
 	Fn<bool()> _emojiPaused;
 
 	int _reordering = 0;
-	bool _activeSelectionVisible = true;
 
 	rpl::lifetime _paletteLifetime;
 	rpl::event_stream<int> _contextMenuRequested;

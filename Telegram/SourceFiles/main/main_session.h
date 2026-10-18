@@ -20,7 +20,6 @@ class SendProgressManager;
 
 namespace Ayu {
 class ChatStickers;
-class LocalChannels;
 } // namespace Ayu
 
 namespace MTP {
@@ -132,7 +131,6 @@ public:
 	[[nodiscard]] Storage::Domain &domainLocal() const;
 
 	[[nodiscard]] AppConfig &appConfig() const;
-	[[nodiscard]] Ayu::LocalChannels &localChannels();
 	[[nodiscard]] Ayu::ChatStickers &chatStickers();
 	void resetChatStickersCache();
 	[[nodiscard]] bool messagePrimaryEditedDate() const {
@@ -372,7 +370,6 @@ private:
 
 	const std::unique_ptr<Support::Helper> _supportHelper;
 	const std::unique_ptr<Support::FastButtonsBots> _fastButtonsBots;
-	std::unique_ptr<Ayu::LocalChannels> _localChannels;
 	std::unique_ptr<Ayu::ChatStickers> _chatStickers;
 
 	std::shared_ptr<QImage> _selfUserpicView;

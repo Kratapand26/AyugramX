@@ -16,8 +16,6 @@
 #include "ayu/features/filters/filters_controller.h"
 #include "ayu/features/forward/ayu_forward.h"
 #include "ayu/features/forward/ayu_forward_rich.h"
-#include "ayu/features/local_channels/local_channels.h"
-#include "ayu/ui/boxes/local_channels_box.h"
 #include "ayu/ui/context_menu/menu_item_subtext.h"
 #include "ayu/ui/message_history/history_section.h"
 #include "ayu/ui/settings/filters/edit_filter.h"
@@ -259,21 +257,6 @@ void AddAyuGramActions(PeerData *peerData,
 
 	const auto &settings = AyuSettings::getInstance();
 	const auto user = peerData->asUser();
-	if (const auto channel = peerData->asBroadcast()) {
-		auto &localChannels = sessionController->session().localChannels();
-		if (localChannels.enabled() && !channel->username().isEmpty()) {
-			const auto saved = localChannels.contains(channel);
-			addCallback(Window::PeerMenuCallback::Args{
-				.text = saved
-					? tr::ayu_LocalChannelsUnfollow(tr::now)
-					: tr::ayu_LocalChannelsFollow(tr::now),
-				.handler = crl::guard(sessionController, [=] {
-					Ayu::ToggleLocalChannel(sessionController, channel);
-				}),
-				.icon = &st::menuIconChannel,
-			});
-		}
-	}
 	const auto showFilters = settings.filtersEnabled()
 		&& (!user || user->isBot());
 	const auto saveDeletedMessages = settings.saveDeletedMessages();

@@ -237,19 +237,12 @@ QImage ChatsFiltersTabs::cacheUnreadCount(int count, bool muted) const {
 	return image;
 }
 
-void ChatsFiltersTabs::setActiveSelectionVisible(bool visible) {
-	if (_activeSelectionVisible != visible) {
-		_activeSelectionVisible = visible;
-		update();
-	}
-}
-
 void ChatsFiltersTabs::paintEvent(QPaintEvent *e) {
 	auto p = QPainter(this);
 
 	const auto clip = e->rect();
 	const auto range = getCurrentActiveRange();
-	const auto activeIndex = _activeSelectionVisible ? activeSection() : -1;
+	const auto activeIndex = activeSection();
 	const auto now = crl::now();
 
 	auto index = 0;
@@ -358,7 +351,7 @@ void ChatsFiltersTabs::paintEvent(QPaintEvent *e) {
 		index = raisedIndex;
 		drawSection(*_sections[raisedIndex].section);
 	}
-	if (_st.barSnapToLabel && _activeSelectionVisible) {
+	if (_st.barSnapToLabel) {
 		const auto drawRect = [&](QRect rect, bool active) {
 			const auto &bar = active ? _barActive : _bar;
 			if (bar) {

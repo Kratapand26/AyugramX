@@ -1158,9 +1158,7 @@ void RowPainter::Paint(
 	const auto sublist = row->sublist();
 	const auto peer = history ? history->peer.get() : nullptr;
 	const auto badgesState = entry->chatListBadgesState();
-	if (context.preloadData) {
-		entry->chatListPreloadData(); // Allow chat list message resolve.
-	}
+	entry->chatListPreloadData(); // Allow chat list message resolve.
 	const auto item = entry->chatListMessage();
 	const auto cloudDraft = [&]() -> const Data::Draft*{
 		if (!thread) {

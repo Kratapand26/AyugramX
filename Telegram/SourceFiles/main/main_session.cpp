@@ -8,7 +8,6 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "main/main_session.h"
 
 #include "ayu/features/chat_stickers/chat_stickers.h"
-#include "ayu/features/local_channels/local_channels.h"
 #include "apiwrap.h"
 #include "api/api_peer_colors.h"
 #include "api/api_updates.h"
@@ -322,13 +321,6 @@ Session::Session(
 	}, _lifetime);
 
 	InitializeBlockedPeers(this);
-}
-
-Ayu::LocalChannels &Session::localChannels() {
-	if (!_localChannels) {
-		_localChannels = std::make_unique<Ayu::LocalChannels>(this);
-	}
-	return *_localChannels;
 }
 
 Ayu::ChatStickers &Session::chatStickers() {

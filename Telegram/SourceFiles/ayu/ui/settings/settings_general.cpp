@@ -9,8 +9,6 @@
 #include "lang_auto.h"
 #include "ayu/ayu_settings.h"
 #include "ayu/features/chat_stickers/chat_stickers.h"
-#include "ayu/features/local_channels/local_channels.h"
-#include "ayu/ui/boxes/local_channels_box.h"
 #include "ayu/ui/settings/ayu_builder.h"
 #include "ayu/ui/settings/settings_ayu_utils.h"
 #include "ayu/ui/settings/settings_main.h"
@@ -167,24 +165,6 @@ void BuildQoLToggles(SectionBuilder &builder, AyuSectionBuilder &ayu) {
 	builder.addSubsectionTitle(tr::ayu_CategoryGeneral());
 
 	const auto controller = builder.controller();
-	const auto localChannels = &controller->session().localChannels();
-	const auto localChannelsToggle = builder.addButton({
-		.id = u"ayu/localChannels"_q,
-		.title = tr::ayu_LocalChannelsEnable(),
-		.st = &st::settingsButtonNoIcon,
-		.toggled = localChannels->enabledValue(),
-	});
-	if (localChannelsToggle) {
-		localChannelsToggle->toggledChanges() | rpl::on_next([=](bool enabled) {
-			localChannels->setEnabled(enabled);
-		}, localChannelsToggle->lifetime());
-	}
-	builder.addButton({
-		.id = u"ayu/manageLocalChannels"_q,
-		.title = tr::ayu_LocalChannelsManage(),
-		.st = &st::settingsButtonNoIcon,
-		.onClick = [=] { Ayu::ShowLocalChannelsBox(controller); },
-	});
 	const auto chatStickers = &controller->session().chatStickers();
 	const auto chatStickersToggle = builder.addButton({
 		.id = u"ayu/chatStickers"_q,
