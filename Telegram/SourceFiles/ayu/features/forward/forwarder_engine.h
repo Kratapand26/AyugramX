@@ -16,12 +16,18 @@
 #include <QPair>
 #include <QMap>
 #include "history/history_item.h"
+#include "ayu/features/forward/ayu_forward_result.h"
+#include "rpl/lifetime.h"
 
 namespace Main {
 class Session;
 } // namespace Main
 
 class PeerData;
+
+namespace AyuForwarder {
+[[nodiscard]] PeerId ParseForwardPeerId(const QString &text);
+} // namespace AyuForwarder
 
 // Forwarding mode enum
 enum class ForwardingMode {
@@ -101,7 +107,7 @@ public:
 	explicit ForwarderEngine(const ForwarderConfig &config, QObject *parent = nullptr);
 	~ForwarderEngine() override;
 
-	void start();
+	bool start();
 	void stop();
 
 	// Global engine access for stop buttons
@@ -116,7 +122,10 @@ Q_SIGNALS:
 private:
 	// --- Core processing ---
 	void run();
-	void processSource(int sourceIndex, const QString &sourceId, int topicId);
+	bool processSource(int sourceIndex, const QString &sourceId, int topicId);
+	void stopAndWait();
+	bool sendHook(const QString &text, bool pin);
+	[[nodiscard]] TextWithTags prepareCaption(not_null<HistoryItem*> item) const;
 
 	// --- Message classification ---
 	QString classifyMessageType(not_null<HistoryItem*> item) const;
@@ -146,16 +155,13 @@ private:
 		not_null<PeerData*> destPeer,
 		MsgId destTopicRootId);
 
-	// --- Concurrent batch download for D/U mode ---
-	using PreDownloadMap = QMap<int64, QString>; // msgId -> local file path
-	PreDownloadMap batchDownloadConcurrent(
-		Main::Session *session,
-		const std::vector<not_null<HistoryItem*>> &items);
-
 	// Cancel-aware sleep: returns true if cancelled during sleep
-	bool sleepWithCancelCheck(int totalMs) const;
+	bool sleepWithCancelCheck(int64 totalMs) const;
 
 	ForwarderConfig _config;
 	std::atomic<bool> _stopRequested{false};
 	QThread *_thread = nullptr;
+	AyuSync::SendResult _lastSendResult;
+	rpl::lifetime _lifetime;
+
 };

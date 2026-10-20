@@ -7,17 +7,21 @@
 #pragma once
 
 #include "history/history.h"
+#include "ayu/features/forward/ayu_forward_result.h"
 #include "main/main_session.h"
 
 #include <atomic>
+#include <map>
 
 namespace AyuForward {
 extern std::atomic<bool> g_isForwarderCanceled;
 extern std::atomic<bool> g_isForwarderRunning;
 
-bool isForwarding(const PeerId &id);
+bool isForwarding(const PeerId &id, const Main::Session &session);
 void cancelForward(const PeerId &id, const Main::Session &session);
-std::pair<QString, QString> stateName(const PeerId &id);
+std::pair<QString, QString> stateName(
+	const PeerId &id,
+	const Main::Session &session);
 
 class ForwardState
 {
@@ -35,22 +39,22 @@ public:
 	}
 
 	ForwardState(const ForwardState &other)
-	: totalChunks(other.totalChunks)
-	, currentChunk(other.currentChunk)
-	, totalMessages(other.totalMessages)
-	, sentMessages(other.sentMessages)
-	, state(other.state)
+	: totalChunks(other.totalChunks.load())
+	, currentChunk(other.currentChunk.load())
+	, totalMessages(other.totalMessages.load())
+	, sentMessages(other.sentMessages.load())
+	, state(other.state.load())
 	, stopRequested(other.stopRequested.load()) {
 	}
 
 	void updateBottomBar(const Main::Session &session, const PeerId *peer, const State &st);
 
-	int totalChunks = 0;
-	int currentChunk = 0;
-	int totalMessages = 0;
-	int sentMessages = 0;
+	std::atomic<int> totalChunks = 0;
+	std::atomic<int> currentChunk = 0;
+	std::atomic<int> totalMessages = 0;
+	std::atomic<int> sentMessages = 0;
 
-	State state = State::Preparing;
+	std::atomic<State> state = State::Preparing;
 	std::atomic<bool> stopRequested = false;
 
 };
@@ -58,14 +62,17 @@ public:
 bool isAyuForwardNeeded(const std::vector<not_null<HistoryItem*>> &items);
 bool isAyuForwardNeeded(not_null<HistoryItem*> item);
 bool isFullAyuForwardNeeded(not_null<HistoryItem*> item);
-void intelligentForward(
+AyuSync::SendResult intelligentForward(
 	not_null<Main::Session*> session,
 	const Api::SendAction &action,
 	const Data::ResolvedForwardDraft &draft);
-void forwardMessages(
+AyuSync::SendResult forwardMessages(
 	not_null<Main::Session*> session,
 	const Api::SendAction &action,
 	bool forwardState,
-	const Data::ResolvedForwardDraft &draft);
+	const Data::ResolvedForwardDraft &draft,
+	const std::map<FullMsgId, TextWithTags> &customTexts = {},
+	Fn<bool()> cancelled = nullptr,
+	int concurrency = 1);
 
 }

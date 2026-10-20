@@ -114,6 +114,7 @@ https://github.com/telegramdesktop/tdesktop/blob/master/LEGAL
 #include "ayu/ayu_worker.h"
 #include "ayu/utils/telegram_helpers.h"
 #include "ayu/features/forward/ayu_forward.h"
+#include "ayu/features/forward/ayu_sync.h"
 
 
 namespace {
@@ -3985,21 +3986,43 @@ void ApiWrap::finishForwarding(const SendAction &action) {
 void ApiWrap::forwardMessages(
 		Data::ResolvedForwardDraft &&draft,
 		SendAction action,
-		FnMut<void()> &&successCallback) {
+		FnMut<void()> &&successCallback,
+		FnMut<void(const MTP::Error &)> &&failureCallback) {
 	Expects(!draft.items.empty());
-
-	const auto fullAyuForward = AyuForward::isFullAyuForwardNeeded(draft.items.front());
-	if (fullAyuForward) {
-		crl::async([=] {
-			AyuForward::forwardMessages(_session, action, false, draft);
-		});
-		return;
+	struct SharedCallback {
+		int requestsLeft = 0;
+		bool failed = false;
+		FnMut<void()> callback;
+		FnMut<void(const MTP::Error &)> failure;
+	};
+	const auto shared = (successCallback || failureCallback)
+		? std::make_shared<SharedCallback>()
+		: nullptr;
+	if (shared) {
+		shared->callback = std::move(successCallback);
+		shared->failure = std::move(failureCallback);
 	}
 
+	const auto fullAyuForward = AyuForward::isFullAyuForwardNeeded(draft.items.front());
 	const auto ayuIntelligentForwardNeeded = AyuForward::isAyuForwardNeeded(draft.items);
-	if (ayuIntelligentForwardNeeded) {
+	if (fullAyuForward || ayuIntelligentForwardNeeded) {
+		const auto session = _session;
+		const auto weak = base::make_weak(session);
 		crl::async([=] {
-			AyuForward::intelligentForward(_session, action, draft);
+			const auto result = fullAyuForward
+				? AyuForward::forwardMessages(session, action, false, draft)
+				: AyuForward::intelligentForward(session, action, draft);
+			crl::on_main(crl::guard(weak, [=] {
+				if (shared && result.sent() && shared->callback) {
+					shared->callback();
+				} else if (shared && !result.sent() && shared->failure) {
+					shared->failure(MTP::Error::Local(
+						result.error.isEmpty()
+							? u"FORWARDING_FAILED"_q
+							: result.error,
+						QString()));
+				}
+			}));
 		});
 		return;
 	}
@@ -4016,8 +4039,8 @@ void ApiWrap::forwardMessages(
 		}
 	}
 	if (draft.items.empty()) {
-		if (successCallback) {
-			successCallback();
+		if (shared && shared->callback) {
+			shared->callback();
 		}
 		return;
 	}
@@ -4028,21 +4051,10 @@ void ApiWrap::forwardMessages(
 
 	const auto collected = CollectForwardRanges(draft.items);
 	if (collected.empty()) {
-		if (successCallback) {
-			successCallback();
+		if (shared && shared->callback) {
+			shared->callback();
 		}
 		return;
-	}
-
-	struct SharedCallback {
-		int requestsLeft = 0;
-		FnMut<void()> callback;
-	};
-	const auto shared = successCallback
-		? std::make_shared<SharedCallback>()
-		: std::shared_ptr<SharedCallback>();
-	if (successCallback) {
-		shared->callback = std::move(successCallback);
 	}
 
 	const auto count = int(draft.items.size());
@@ -4186,7 +4198,8 @@ void ApiWrap::forwardMessages(
 					_session->api().updates().checkForSentToScheduled(
 						result);
 				}
-				if (shared && !--shared->requestsLeft) {
+				if (shared && !--shared->requestsLeft
+					&& !shared->failed && shared->callback) {
 					shared->callback();
 				}
 
@@ -4199,6 +4212,12 @@ void ApiWrap::forwardMessages(
 				}
 			},
 			[=](const MTP::Error &error, const MTP::Response &) {
+				if (shared && !shared->failed) {
+					shared->failed = true;
+					if (shared->failure) {
+						shared->failure(error);
+					}
+				}
 				if (idsCopy) {
 					for (const auto &[randomId, itemId] : *idsCopy) {
 						_session->api().sendMessageFail(
@@ -4444,7 +4463,10 @@ void ApiWrap::sendFiles(
 		Ui::PreparedList &&list,
 		SendMediaType type,
 		std::shared_ptr<SendingAlbum> album,
-		SendAction action) {
+		SendAction action,
+		Fn<void(FullMsgId)> messageCreated,
+		Fn<bool()> cancelled,
+		Fn<void()> preparationFailed) {
 	const auto &ephemeral = _session->ephemeralMessages();
 	if (album && !ephemeral.isEphemeralBotReply(action.replyTo.messageId)) {
 		const auto peer = action.history->peer;
@@ -4452,6 +4474,9 @@ void ApiWrap::sendFiles(
 			if (ephemeral.hasEphemeralCommand(peer, file.caption.text)) {
 				LOG(("API Error: "
 					"Dropped album send with ephemeral command caption."));
+				if (preparationFailed) {
+					preparationFailed();
+				}
 				return;
 			}
 		}
@@ -4478,6 +4503,9 @@ void ApiWrap::sendFiles(
 			: SendMediaType::File;
 		const auto forceFile = (type == SendMediaType::File);
 		auto fileTo = to;
+		fileTo.messageCreated = messageCreated;
+		fileTo.cancelled = cancelled;
+		fileTo.preparationFailed = preparationFailed;
 		if (file.ttlSeconds && !fileTo.options.scheduled) {
 			fileTo.options.ttlSeconds = file.ttlSeconds;
 		}
@@ -4871,7 +4899,8 @@ void ApiWrap::sendRichMessage(
 
 void ApiWrap::sendMessage(
 		MessageToSend &&message,
-		std::optional<MsgId> localMessageId) {
+		std::optional<MsgId> localMessageId,
+		Fn<void(FullMsgId)> messageCreated) {
 	applyGhostScheduling(message.action, message.textWithTags.text);
 	const auto clearReplyTo = prependPseudoReply(message);
 
@@ -4911,7 +4940,7 @@ void ApiWrap::sendMessage(
 	const auto ephemeral = _session->ephemeralMessages().wouldSend(message);
 	if (!ephemeral
 		&& !canSendTexts
-		&& !AyuForward::isForwarding(peer->id)) {
+		&& !AyuForward::isForwarding(peer->id, session())) {
 		return;
 	} else if (_session->ephemeralMessages().trySend(message)) {
 		if (clearCloudDraft) {
@@ -4919,7 +4948,7 @@ void ApiWrap::sendMessage(
 		}
 		return;
 	}
-	if (Api::SendDice(message)) {
+	if (Api::SendDice(message, messageCreated)) {
 		return;
 	}
 	local().saveRecentSentHashtags(textWithTags.text);
@@ -4963,6 +4992,9 @@ void ApiWrap::sendMessage(
 			randomId,
 			peer->id,
 			sending.text);
+		if (messageCreated) {
+			messageCreated(newId);
+		}
 
 		MTPstring msgText(MTP_string(sending.text));
 		auto flags = NewMessageFlags(peer);

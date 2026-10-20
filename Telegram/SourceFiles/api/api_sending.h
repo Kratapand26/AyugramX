@@ -49,7 +49,9 @@ void SendExistingPhoto(
 	not_null<PhotoData*> photo,
 	std::optional<MsgId> localMessageId = std::nullopt);
 
-bool SendDice(MessageToSend &message);
+bool SendDice(
+	MessageToSend &message,
+	Fn<void(FullMsgId)> messageCreated = nullptr);
 
 // We can't create Data::LocationPoint() and use it
 // for a local sending message, because we can't request

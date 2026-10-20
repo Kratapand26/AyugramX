@@ -38,6 +38,9 @@
 #include <QFileInfo>
 #include <QDir>
 #include <QtGui/QCursor>
+#include <cmath>
+#include <limits>
+#include <set>
 
 namespace AyuForwarder {
 namespace {
@@ -182,13 +185,28 @@ void ForwarderBox::prepare() {
 	// --- Bottom buttons ---
 	addButton(tr::lng_settings_save(), [=] { saveToConfig(); });
 	addButton(rpl::single(QString("Start")), [=] { startForwarding(); });
+	addButton(rpl::single(u"Stop"_q), [=] {
+		if (!AyuForward::g_isForwarderRunning) {
+			_controller->showToast(u"No forwarding job is running."_q);
+			return;
+		}
+		ForwarderEngine::stopActiveEngine();
+		_controller->showToast(u"Stopping the forwarder..."_q);
+	});
 
 	// Left button: clear the resume-state file so the next run starts fresh.
 	addLeftButton(rpl::single(QString("Reset Resume State")), [=] {
-		QFile(statePath()).remove();
+		if (AyuForward::g_isForwarderRunning) {
+			_controller->showToast(u"Stop the running forwarder before resetting progress."_q);
+			return;
+		}
+		if (QFileInfo::exists(statePath()) && !QFile(statePath()).remove()) {
+			_controller->showToast(u"Could not clear the resume file."_q);
+			return;
+		}
 		auto &fwState = ForwarderState::instance();
 		fwState.setFilePath(statePath());
-		fwState.load();
+		fwState.clear();
 		_controller->showToast("Resume state cleared.");
 	});
 
@@ -296,7 +314,7 @@ void ForwarderBox::buildChannelBindings(Ui::VerticalLayout *inner) {
 		"Destination Topic ID (optional)",
 		"0",
 		_loaded.destTopicId);
-	addHint(inner, "Use 0 for no topic filter. Topic IDs must line up with the source IDs above.");
+	addHint(inner, "Use 0 for all messages. Separate sources with commas; use semicolons for multiple topics in one source.");
 }
 
 // ============================================================================
@@ -390,11 +408,11 @@ void ForwarderBox::buildDispatch(Ui::VerticalLayout *inner) {
 
 	_dropCaptions = addToggleRow(inner, "Drop Captions (Native Mode)", _loaded.dropCaptions);
 	_duSendIndividually = addToggleRow(inner, "Send Download/Upload Albums Individually", _loaded.duSendIndividually);
-	_splitDocAlbums = addToggleRow(inner, "Split Document Albums", _loaded.splitDocAlbums);
+	_splitDocAlbums = addToggleRow(inner, "Split Document Albums (Copy/Upload)", _loaded.splitDocAlbums);
 	_inlineButtonsToText = addToggleRow(inner, "Convert Inline Buttons to Text", _loaded.inlineButtonsToText);
 	_filenameAsCaption = addToggleRow(inner, "Filename as Caption (if empty)", _loaded.filenameAsCaption);
 
-	addHint(inner, "Native keeps authorship hidden; Copy/Download re-send as new media.");
+	addHint(inner, "Caption edits apply in Copy and Download & Upload modes. Native only drops author information and optional captions.");
 }
 
 // ============================================================================
@@ -406,9 +424,9 @@ void ForwarderBox::buildTimings(Ui::VerticalLayout *inner) {
 	Ui::AddSubsectionTitle(inner, rpl::single(QString("Concurrency & Timings")));
 
 	_delaySeconds = addLabeledInput(inner, "Delay Seconds (between messages)", "1.0", _loaded.delaySeconds);
-	_batchSize = addLabeledInput(inner, "Message Limit (0 = unlimited)", "0", _loaded.batchSize);
+	_batchSize = addLabeledInput(inner, "Messages per pause (0 = no batch pause)", "0", _loaded.batchSize);
 	_fetchCycleDelay = addLabeledInput(inner, "Fetch Cycle Delay Seconds", "0.0", _loaded.fetchCycleDelay);
-	_concurrentBatchSize = addLabeledInput(inner, "Concurrent Batch Size", "1", _loaded.concurrentBatchSize);
+	_concurrentBatchSize = addLabeledInput(inner, "Parallel Downloads (1-8)", "1", _loaded.concurrentBatchSize);
 	addHint(inner, "Higher concurrency speeds up Download & Upload mode but uses more bandwidth.");
 }
 
@@ -429,10 +447,10 @@ void ForwarderBox::buildAdvanced(Ui::VerticalLayout *inner) {
 	Ui::AddSubsectionTitle(advanced, rpl::single(QString("Advanced / Resilience")));
 
 	_retryAttempts = addLabeledInput(advanced, "Retry Attempts", "2", _loaded.retryAttempts);
-	_retryDelay = addLabeledInput(advanced, "Retry Delay Seconds", "5.0", _loaded.retryDelay);
+	_retryDelay = addLabeledInput(advanced, "Minimum Retry Delay Seconds", "5.0", _loaded.retryDelay);
 	_failureThreshold = addLabeledInput(advanced, "Failure Threshold (0 = disabled)", "10", _loaded.failureThreshold);
 	_iterChunkWait = addLabeledInput(advanced, "Iter Messages Chunk Wait Time", "1.0", _loaded.iterChunkWait);
-	addHint(advanced, "Controls how the engine recovers from transient MTP/network failures.");
+	addHint(advanced, "Known unsent failures use the longer of this delay and the 10/20/40-minute backoff. Uncertain sends stop for review.");
 
 	// Collapse toggle: clicking the row toggles advanced-section visibility.
 	auto textStream = inner->lifetime().make_state<rpl::event_stream<QString>>();
@@ -456,8 +474,8 @@ void ForwarderBox::buildExecutionOverrides(Ui::VerticalLayout *inner) {
 	Ui::AddSkip(inner);
 	Ui::AddSubsectionTitle(inner, rpl::single(QString("Execution Overrides")));
 
-	_startMessageId = addLabeledInput(inner, "Start Message ID (0 = newest)", "0", _loaded.startMessageId);
-	_endMessageId = addLabeledInput(inner, "End Message ID (0 = oldest)", "0", _loaded.endMessageId);
+	_startMessageId = addLabeledInput(inner, "Start Message ID (0 = saved position)", "0", _loaded.startMessageId);
+	_endMessageId = addLabeledInput(inner, "End Message ID (0 = no limit)", "0", _loaded.endMessageId);
 	_startMessage = addLabeledInput(
 		inner,
 		"Start Message Text Hook",
@@ -473,7 +491,7 @@ void ForwarderBox::buildExecutionOverrides(Ui::VerticalLayout *inner) {
 
 	_pinStartMessage = addToggleRow(inner, "Pin Start Message", _loaded.pinStartMessage);
 
-	addHint(inner, "Hooks are posted to the destination at the start/end of a run.");
+	addHint(inner, "Ranges are inclusive and leave saved progress unchanged. The start hook runs per source/topic; the end hook requires a successful run.");
 }
 
 // ============================================================================
@@ -512,15 +530,16 @@ void ForwarderBox::loadFromConfig() {
 
 	QSettings cfg(path, QSettings::IniFormat);
 
-	auto get = [&](const QString &key) {
-		return cfg.value(key).toString().trimmed();
+	auto get = [&](const QString &key, const QString &fallback = QString()) {
+		const auto value = cfg.value(key).toString().trimmed();
+		return value.isEmpty() ? fallback : value;
 	};
 
 	// --- Channel Bindings ---
 	_loaded.sourceIds = get("Channels/source_channels");
 	_loaded.sourceTopicIds = get("Channels/source_topic_ids");
 	_loaded.destId = get("Channels/destination");
-	_loaded.destTopicId = get("Channels/destination_topic_id");
+	_loaded.destTopicId = get("Channels/destination_topic_id", _loaded.destTopicId);
 
 	// --- Message Filtering ---
 	_loaded.allowedTypes = get("Forwarding/allowed_message_types");
@@ -538,7 +557,8 @@ void ForwarderBox::loadFromConfig() {
 	if (parseBool(cfg.value("Forwarding/download_then_upload", "false").toString())) {
 		mode = u"download_upload"_q;
 	}
-	_forwardingModeValue = mode;
+	_forwardingModeValue = std::find(kModeRawValues().begin(), kModeRawValues().end(), mode)
+		!= kModeRawValues().end() ? mode : u"native_drop_author"_q;
 
 	_loaded.dropCaptions = parseBool(cfg.value("Forwarding/native_forward_drop_captions", "false").toString());
 	_loaded.duSendIndividually = parseBool(cfg.value("Forwarding/du_send_albums_individually", "false").toString());
@@ -547,20 +567,20 @@ void ForwarderBox::loadFromConfig() {
 	_loaded.filenameAsCaption = parseBool(cfg.value("CaptionEditing/filename_as_caption", "false").toString());
 
 	// --- Timings ---
-	_loaded.delaySeconds = get("Forwarding/delay_seconds");
-	_loaded.batchSize = get("Forwarding/message_limit");
-	_loaded.fetchCycleDelay = get("Forwarding/fetch_cycle_delay_seconds");
-	_loaded.concurrentBatchSize = get("Forwarding/concurrent_batch_size");
+	_loaded.delaySeconds = get("Forwarding/delay_seconds", _loaded.delaySeconds);
+	_loaded.batchSize = get("Forwarding/message_limit", _loaded.batchSize);
+	_loaded.fetchCycleDelay = get("Forwarding/fetch_cycle_delay_seconds", _loaded.fetchCycleDelay);
+	_loaded.concurrentBatchSize = get("Forwarding/concurrent_batch_size", _loaded.concurrentBatchSize);
 
 	// --- Advanced / Resilience ---
-	_loaded.retryAttempts = get("Forwarding/retry_attempts");
-	_loaded.retryDelay = get("Forwarding/retry_delay");
-	_loaded.failureThreshold = get("Forwarding/failure_threshold");
-	_loaded.iterChunkWait = get("Forwarding/iter_messages_chunk_wait_time");
+	_loaded.retryAttempts = get("Forwarding/retry_attempts", _loaded.retryAttempts);
+	_loaded.retryDelay = get("Forwarding/retry_delay", _loaded.retryDelay);
+	_loaded.failureThreshold = get("Forwarding/failure_threshold", _loaded.failureThreshold);
+	_loaded.iterChunkWait = get("Forwarding/iter_messages_chunk_wait_time", _loaded.iterChunkWait);
 
 	// --- Execution Overrides ---
-	_loaded.startMessageId = get("Forwarding/start_message_id");
-	_loaded.endMessageId = get("Forwarding/end_message_id");
+	_loaded.startMessageId = get("Forwarding/start_message_id", _loaded.startMessageId);
+	_loaded.endMessageId = get("Forwarding/end_message_id", _loaded.endMessageId);
 	_loaded.startMessage = get("Hooks/start_message");
 	_loaded.endMessage = get("Hooks/end_message");
 	_loaded.pinStartMessage = parseBool(cfg.value("Hooks/pin_start_message", "false").toString());
@@ -570,7 +590,106 @@ void ForwarderBox::loadFromConfig() {
 	_logLevelValue = lvl.isEmpty() ? u"INFO"_q : lvl;
 }
 
-void ForwarderBox::saveToConfig() {
+bool ForwarderBox::validateInputs() {
+	const auto reject = [&](Ui::InputField *field, const QString &message) {
+		field->setFocusFast();
+		field->showError();
+		_controller->showToast(message);
+		return false;
+	};
+	const auto number = [&](Ui::InputField *field, const QString &fallback,
+			double maximum, bool integer, double minimum = 0.) {
+		auto text = field->getLastText().trimmed();
+		if (text.isEmpty()) {
+			text = fallback;
+			field->setText(text);
+		}
+		auto valid = false;
+		const auto value = text.toDouble(&valid);
+		if (!valid || !std::isfinite(value) || value < minimum || value > maximum
+			|| (integer && std::trunc(value) != value)) {
+			return reject(field, u"Enter a valid value between %1 and %2."_q.arg(minimum).arg(maximum));
+		}
+		if (integer) {
+			field->setText(QString::number(int(value)));
+		}
+		return true;
+	};
+	const auto sources = _sourceIds->getLastText().trimmed().split(',', Qt::KeepEmptyParts);
+	const auto topics = _sourceTopicIds->getLastText().trimmed().split(',', Qt::KeepEmptyParts);
+	const auto destination = ParseForwardPeerId(_destId->getLastText());
+	if (!destination) {
+		return reject(_destId, u"Enter a valid destination ID."_q);
+	}
+	if (!number(_destTopicId, u"0"_q, std::numeric_limits<int>::max(), true)) {
+		return false;
+	}
+	if (topics.size() > sources.size()) {
+		return reject(_sourceTopicIds, u"There are more topic entries than source chats."_q);
+	}
+	auto seen = std::set<std::pair<PeerId, int>>();
+	for (auto i = 0; i < sources.size(); ++i) {
+		const auto source = ParseForwardPeerId(sources[i]);
+		if (!source) {
+			return reject(_sourceIds, u"Enter valid source IDs separated by commas."_q);
+		}
+		const auto topicParts = (i < topics.size())
+			? topics[i].split(';', Qt::KeepEmptyParts) : QStringList{ u"0"_q };
+		for (const auto &part : topicParts) {
+			auto valid = part.trimmed().isEmpty();
+			const auto topic = valid ? 0 : part.trimmed().toInt(&valid);
+			if (!valid || topic < 0) {
+				return reject(_sourceTopicIds, u"Topic IDs must be whole numbers, or 0 for all messages."_q);
+			}
+			if (source == destination && (!topic || topic == _destTopicId->getLastText().toInt())) {
+				return reject(_destId, u"Source and destination must be different chats or separate topics."_q);
+			}
+			const auto overlaps = std::any_of(seen.begin(), seen.end(), [&](const auto &entry) {
+				return entry.first == source && (!entry.second || !topic || entry.second == topic);
+			});
+			if (overlaps || !seen.emplace(source, topic).second) {
+				return reject(_sourceIds, u"Remove duplicate source and topic entries."_q);
+			}
+		}
+	}
+	if (!number(_delaySeconds, u"1.0"_q, 86400, false)
+		|| !number(_batchSize, u"0"_q, std::numeric_limits<int>::max(), true)
+		|| !number(_fetchCycleDelay, u"0.0"_q, 86400, false)
+		|| !number(_concurrentBatchSize, u"1"_q, 8, true, 1)
+		|| !number(_retryAttempts, u"2"_q, 100, true)
+		|| !number(_retryDelay, u"5.0"_q, 86400, false)
+		|| !number(_failureThreshold, u"10"_q, 1000, true)
+		|| !number(_iterChunkWait, u"1.0"_q, 86400, false)
+		|| !number(_startMessageId, u"0"_q, std::numeric_limits<int>::max(), true)
+		|| !number(_endMessageId, u"0"_q, std::numeric_limits<int>::max(), true)) {
+		return false;
+	}
+	const auto start = _startMessageId->getLastText().toInt();
+	const auto end = _endMessageId->getLastText().toInt();
+	if (start && end && start > end) {
+		return reject(_endMessageId, u"The end message ID must be at least the start ID."_q);
+	}
+	const auto allowed = applyPresetByIndex(0).split(',');
+	for (const auto &type : _allowedTypesInput->getLastText().split(',', Qt::SkipEmptyParts)) {
+		if (!allowed.contains(type.trimmed(), Qt::CaseInsensitive)) {
+			return reject(_allowedTypesInput, u"Choose a supported message type from a preset."_q);
+		}
+	}
+	auto patterns = _removePatterns->getLastText();
+	patterns.replace('\n', ',');
+	for (const auto &pattern : patterns.split(',', Qt::SkipEmptyParts)) {
+		const auto parts = pattern.split(':', Qt::KeepEmptyParts);
+		if (parts.size() != 2 || parts[0].trimmed().isEmpty() || parts[1].trimmed().isEmpty()) {
+			return reject(_removePatterns, u"Use start:end for each removal pattern."_q);
+		}
+	}
+	return true;
+}
+
+bool ForwarderBox::saveToConfig() {
+	if (!validateInputs()) {
+		return false;
+	}
 	const auto path = configPath();
 	QSettings cfg(path, QSettings::IniFormat);
 
@@ -624,7 +743,12 @@ void ForwarderBox::saveToConfig() {
 	cfg.setValue("Logging/log_level", lvl.isEmpty() ? "INFO" : lvl);
 
 	cfg.sync();
-	_controller->showToast("Configuration saved.");
+	if (cfg.status() != QSettings::NoError) {
+		_controller->showToast(u"Could not save the forwarding configuration."_q);
+		return false;
+	}
+	_controller->showToast(u"Configuration saved."_q);
+	return true;
 }
 
 // ============================================================================
@@ -632,20 +756,20 @@ void ForwarderBox::saveToConfig() {
 // ============================================================================
 
 void ForwarderBox::startForwarding() {
-	if (!_sourceIds || _sourceIds->getLastText().trimmed().isEmpty()) {
-		if (_sourceIds) { _sourceIds->setFocus(); _sourceIds->showError(); }
+	if (AyuForward::g_isForwarderRunning) {
+		_controller->showToast(u"The forwarder is still running or stopping."_q);
 		return;
 	}
-	if (!_destId || _destId->getLastText().trimmed().isEmpty()) {
-		if (_destId) { _destId->setFocus(); _destId->showError(); }
+	if (!saveToConfig()) {
 		return;
 	}
-
-	saveToConfig();
 
 	auto &fwState = ForwarderState::instance();
 	fwState.setFilePath(statePath());
-	fwState.load();
+	if (!fwState.load()) {
+		_controller->showToast(u"Could not read resume progress. Fix the resume file or reset it explicitly."_q);
+		return;
+	}
 	auto &fwLog = ForwarderLog::instance();
 	fwLog.setFilePath(logPath());
 	fwLog.append("Config saved. Source: " + _sourceIds->getLastText().trimmed());
@@ -656,10 +780,10 @@ void ForwarderBox::startForwarding() {
 	ForwarderConfig engineConfig;
 	engineConfig.session = &_controller->session();
 	engineConfig.sourceIds = _sourceIds->getLastText().trimmed().split(',', Qt::SkipEmptyParts);
-	for (auto &s : engineConfig.sourceIds) s = s.trimmed();
-	engineConfig.sourceTopicIds = _sourceTopicIds->getLastText().trimmed().split(',', Qt::SkipEmptyParts);
+	for (auto &s : engineConfig.sourceIds) s = QString::number(s.trimmed().toLongLong());
+	engineConfig.sourceTopicIds = _sourceTopicIds->getLastText().trimmed().split(',', Qt::KeepEmptyParts);
 	for (auto &s : engineConfig.sourceTopicIds) s = s.trimmed();
-	engineConfig.destinationId = _destId->getLastText().trimmed();
+	engineConfig.destinationId = QString::number(_destId->getLastText().trimmed().toLongLong());
 	engineConfig.destinationTopicId = _destTopicId->getLastText().trimmed().toInt();
 
 	const auto modeStr = _forwardingModeValue.current().toLower();
@@ -681,12 +805,14 @@ void ForwarderBox::startForwarding() {
 	if (!kwStr.isEmpty()) {
 		engineConfig.primaryKeywords = kwStr.split(',', Qt::SkipEmptyParts);
 		for (auto &k : engineConfig.primaryKeywords) k = k.trimmed();
+		engineConfig.primaryKeywords.removeAll(QString());
 	}
 
 	const auto secKwStr = _secondaryKeywords ? _secondaryKeywords->getLastText().trimmed() : QString();
 	if (!secKwStr.isEmpty()) {
 		engineConfig.secondaryKeywords = secKwStr.split(',', Qt::SkipEmptyParts);
 		for (auto &k : engineConfig.secondaryKeywords) k = k.trimmed();
+		engineConfig.secondaryKeywords.removeAll(QString());
 	}
 	engineConfig.keywordCaseSensitive = parseBool(cfg.value("Forwarding/keyword_case_sensitive", "false").toString());
 
@@ -694,6 +820,7 @@ void ForwarderBox::startForwarding() {
 	if (!wordsStr.isEmpty()) {
 		engineConfig.wordsToRemove = wordsStr.split(',', Qt::SkipEmptyParts);
 		for (auto &w : engineConfig.wordsToRemove) w = w.trimmed();
+		engineConfig.wordsToRemove.removeAll(QString());
 	}
 	engineConfig.removalCaseSensitive = parseBool(cfg.value("CaptionEditing/removal_case_sensitive", "false").toString());
 	engineConfig.removeWholeWordOnly = parseBool(cfg.value("CaptionEditing/remove_whole_word_only", "true").toString());
@@ -736,24 +863,17 @@ void ForwarderBox::startForwarding() {
 		engineConfig.logLevel = u"INFO"_q;
 	}
 
-	// Guard against starting a second engine.
-	if (AyuForward::g_isForwarderRunning) {
-		if (AyuForward::g_isForwarderCanceled) {
-			for (int i = 0; i < 20; ++i) {
-				QThread::msleep(100);
-				QCoreApplication::processEvents();
-				if (!AyuForward::g_isForwarderRunning) break;
-			}
-		}
-		if (AyuForward::g_isForwarderRunning) {
-			_controller->showToast("Engine is already running! Stop it first.");
-			return;
-		}
-	}
-
 	auto *engine = new ForwarderEngine(engineConfig);
 	QObject::connect(engine, &ForwarderEngine::finished, engine, &QObject::deleteLater);
-	engine->start();
+	const auto controller = _controller;
+	QObject::connect(engine, &ForwarderEngine::error, controller.get(), [=](const QString &message) {
+		controller->showToast(message);
+	});
+	if (!engine->start()) {
+		delete engine;
+		_controller->showToast(u"The forwarder is already running."_q);
+		return;
+	}
 	_controller->showToast("Auto-Forwarder pipeline initialized!");
 	closeBox();
 }

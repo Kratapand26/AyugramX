@@ -172,6 +172,9 @@ struct FileLoadTo {
 	Api::SendOptions options;
 	FullReplyTo replyTo;
 	MsgId replaceMediaOf;
+	Fn<void(FullMsgId)> messageCreated;
+	Fn<bool()> cancelled;
+	Fn<void()> preparationFailed;
 };
 
 using UploadFileParts = std::vector<QByteArray>;

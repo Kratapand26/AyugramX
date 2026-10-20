@@ -356,7 +356,8 @@ public:
 	void forwardMessages(
 		Data::ResolvedForwardDraft &&draft,
 		SendAction action,
-		FnMut<void()> &&successCallback = nullptr);
+		FnMut<void()> &&successCallback = nullptr,
+		FnMut<void(const MTP::Error &)> &&failureCallback = nullptr);
 	void shareContact(
 		const QString &phone,
 		const QString &firstName,
@@ -381,7 +382,10 @@ public:
 		Ui::PreparedList &&list,
 		SendMediaType type,
 		std::shared_ptr<SendingAlbum> album,
-		SendAction action);
+		SendAction action,
+		Fn<void(FullMsgId)> messageCreated = nullptr,
+		Fn<bool()> cancelled = nullptr,
+		Fn<void()> preparationFailed = nullptr);
 	void sendFile(
 		const QByteArray &fileContent,
 		SendMediaType type,
@@ -417,7 +421,8 @@ public:
 		SendAction action);
 	void sendMessage(
 		MessageToSend &&message,
-		std::optional<MsgId> localMessageId = std::nullopt);
+		std::optional<MsgId> localMessageId = std::nullopt,
+		Fn<void(FullMsgId)> messageCreated = nullptr);
 	void sendBotStart(
 		std::shared_ptr<Ui::Show> show,
 		not_null<UserData*> bot,

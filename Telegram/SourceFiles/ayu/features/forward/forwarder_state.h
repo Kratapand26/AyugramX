@@ -8,6 +8,8 @@
 
 #include <QString>
 #include <QJsonObject>
+#include <QMap>
+#include <QMutex>
 
 namespace AyuForwarder {
 
@@ -22,20 +24,26 @@ public:
 	static ForwarderState& instance();
 
 	void setFilePath(const QString &path);
-	void load();
-	void save() const;
+	bool load();
+	bool save() const;
+	void selectContext(const QString &context);
+	void clear();
 
 	int64 getLastProcessedId(const QString &sourceKey) const;
 	void setLastProcessedId(const QString &sourceKey, int64 msgId, int64 topicId, const QString &name);
 	void setLastProcessedId(const QString &sourceKey, int64 msgId); // preserves existing name and topic
 
-	[[nodiscard]] const QMap<QString, SourceProgress>& allProgress() const { return _progress; }
+	[[nodiscard]] QMap<QString, SourceProgress> allProgress() const;
 
 private:
 	ForwarderState() = default;
 
 	QString _filePath;
+	QString _context;
+	mutable QMutex _mutex;
 	QMap<QString, SourceProgress> _progress;
+	QMap<QString, QMap<QString, SourceProgress>> _contexts;
+
 };
 
 } // namespace AyuForwarder

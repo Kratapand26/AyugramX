@@ -840,7 +840,9 @@ void SendExistingPhoto(
 		std::move(localMessageId));
 }
 
-bool SendDice(MessageToSend &message) {
+bool SendDice(
+		MessageToSend &message,
+		Fn<void(FullMsgId)> messageCreated) {
 	const auto full = QStringView(message.textWithTags.text).trimmed();
 	auto length = 0;
 	if (!Ui::Emoji::Find(full.data(), full.data() + full.size(), &length)
@@ -879,6 +881,9 @@ bool SendDice(MessageToSend &message) {
 	const auto newId = FullMsgId(
 		peer->id,
 		session->data().nextLocalMessageId());
+	if (messageCreated) {
+		messageCreated(newId);
+	}
 	const auto randomId = base::RandomValue<uint64>();
 
 	auto &histories = history->owner().histories();
@@ -1185,6 +1190,9 @@ struct ConfirmedLocalFile {
 		(isEditing
 			? file->to.replaceMediaOf
 			: session->data().nextLocalMessageId()));
+	if (!isEditing && file->to.messageCreated) {
+		file->to.messageCreated(newId);
+	}
 	const auto welcomeTemplate = file->to.options.welcomeTemplate;
 	if (const auto album = welcomeTemplate ? nullptr : file->album.lock()) {
 		const auto it = ranges::find(
@@ -1379,6 +1387,9 @@ void AddConfirmedLocalPlaceholder(const ConfirmedLocalFile &local) {
 void SendConfirmedFile(
 		not_null<Main::Session*> session,
 		const std::shared_ptr<FilePrepareResult> &file) {
+	if (file->to.cancelled && file->to.cancelled()) {
+		return;
+	}
 	const auto welcomeTemplate = file->to.options.welcomeTemplate;
 	if (welcomeTemplate && file->to.replaceMediaOf) {
 		return;

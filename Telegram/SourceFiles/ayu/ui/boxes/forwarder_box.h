@@ -54,7 +54,7 @@ private:
 		QString sourceIds;
 		QString sourceTopicIds;
 		QString destId;
-		QString destTopicId;
+		QString destTopicId = u"0"_q;
 
 		QString allowedTypes;
 		QString primaryKeywords;
@@ -71,18 +71,18 @@ private:
 		bool inlineButtonsToText = false;
 		bool filenameAsCaption = false;
 
-		QString delaySeconds;
-		QString batchSize;
-		QString fetchCycleDelay;
-		QString concurrentBatchSize;
+		QString delaySeconds = u"1.0"_q;
+		QString batchSize = u"0"_q;
+		QString fetchCycleDelay = u"0.0"_q;
+		QString concurrentBatchSize = u"1"_q;
 
-		QString retryAttempts;
-		QString retryDelay;
-		QString failureThreshold;
-		QString iterChunkWait;
+		QString retryAttempts = u"2"_q;
+		QString retryDelay = u"5.0"_q;
+		QString failureThreshold = u"10"_q;
+		QString iterChunkWait = u"1.0"_q;
 
-		QString startMessageId;
-		QString endMessageId;
+		QString startMessageId = u"0"_q;
+		QString endMessageId = u"0"_q;
 		QString startMessage;
 		QString endMessage;
 		bool pinStartMessage = false;
@@ -113,7 +113,8 @@ private:
 
 	// --- Config persistence ---
 	void loadFromConfig();
-	void saveToConfig();
+	bool saveToConfig();
+	bool validateInputs();
 
 	// --- Engine start ---
 	void startForwarding();
@@ -173,6 +174,7 @@ private:
 	Ui::SettingsButton *_pinStartMessage = nullptr;
 
 	base::unique_qptr<Ui::PopupMenu> _menu;
+
 };
 
 } // namespace AyuForwarder

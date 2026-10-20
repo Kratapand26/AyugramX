@@ -10,6 +10,7 @@
 #include "api/api_sending.h"
 #include "apiwrap.h"
 #include "ayu/utils/telegram_helpers.h"
+#include "ayu/features/forward/forwarder_progress.h"
 #include "base/base_file_utilities.h"
 #include "core/application.h"
 #include "core/core_settings.h"
@@ -28,7 +29,11 @@
 #include "main/main_session.h"
 #include "storage/localimageloader.h"
 
+#include <QCoreApplication>
+#include <QThread>
 #include <algorithm>
+#include <future>
+#include <set>
 #include <mutex>
 #include <utility>
 
@@ -174,7 +179,7 @@ void ReleaseDocumentDownloadConsumer(
 
 [[nodiscard]] QString LoadedDocumentPath(not_null<DocumentData*> document) {
 	auto result = QString();
-	crl::on_main_sync([&] {
+	AyuSync::RunOnMainSync([&] {
 		result = document->filepath(true);
 	});
 	return result;
@@ -255,7 +260,123 @@ void CompleteDocumentDownload(
 	return filedialogNextFilename(filename, QString(), directory);
 }
 
+struct SendReceipt {
+	TimedCountDownLatch done{ 1 };
+	rpl::lifetime lifetime;
+	AyuForwarder::SendProgress<FullMsgId> progress;
+	SendResult result;
+	bool finished = false;
+};
+
+void FinishSend(
+		const std::shared_ptr<SendReceipt> &receipt,
+		SendOutcome outcome,
+		QString error = {}) {
+	if (receipt->finished) {
+		return;
+	}
+	receipt->finished = true;
+	receipt->result.outcome = outcome;
+	receipt->result.error = std::move(error);
+	receipt->done.countDown();
+}
+
+void CheckSend(const std::shared_ptr<SendReceipt> &receipt) {
+	if (receipt->progress.complete()) {
+		FinishSend(receipt, SendOutcome::Sent);
+	}
+}
+
+void MessageCreated(
+		const std::shared_ptr<SendReceipt> &receipt,
+		FullMsgId id) {
+	if (!receipt->finished) {
+		receipt->progress.created(id);
+	}
+}
+
+void ObserveSend(
+		not_null<Main::Session*> session,
+		const std::shared_ptr<SendReceipt> &receipt) {
+	session->data().itemIdChanged() | rpl::on_next([=](
+			const Data::Session::IdChange &update) {
+		if (!receipt->finished
+			&& receipt->progress.confirm(FullMsgId(
+				update.newId.peer,
+				update.oldId))) {
+			receipt->result.confirmed = receipt->progress.confirmed();
+			receipt->result.messageId = update.newId;
+			CheckSend(receipt);
+		}
+	}, receipt->lifetime);
+	session->data().itemDataChanges() | rpl::on_next([=](
+			not_null<HistoryItem*> item) {
+		if (receipt->progress.contains(item->fullId()) && item->hasFailed()) {
+			FinishSend(receipt, SendOutcome::Failed);
+		}
+	}, receipt->lifetime);
+	session->data().itemRemoved() | rpl::on_next([=](
+			not_null<const HistoryItem*> item) {
+		const auto id = item->fullId();
+		if (receipt->progress.contains(id)) {
+			AyuSync::RunOnMain([=] {
+				if (receipt->progress.contains(id)) {
+					FinishSend(receipt, SendOutcome::Failed);
+				}
+			});
+		}
+	}, receipt->lifetime);
+	session->data().sessionDataAboutToBeCleared() | rpl::on_next([=] {
+		FinishSend(receipt, SendOutcome::Cancelled);
+	}, receipt->lifetime);
+}
+
+SendResult AwaitSend(
+		not_null<Main::Session*> session,
+		const std::shared_ptr<SendReceipt> &receipt,
+		const Fn<bool()> &cancelled) {
+	const auto weak = base::make_weak(session);
+	const auto waited = WaitForDownload(
+		receipt->done,
+		std::chrono::minutes(30),
+		cancelled);
+	auto result = SendResult();
+	AyuSync::RunOnMainSync([&] {
+		if (!receipt->finished) {
+			FinishSend(
+				receipt,
+				waited == DownloadWaitResult::Cancelled
+					? SendOutcome::Cancelled
+					: SendOutcome::Unconfirmed,
+				waited == DownloadWaitResult::Cancelled
+					? u"SEND_CANCELLED"_q : u"SEND_UNCONFIRMED"_q);
+		}
+		receipt->lifetime.destroy();
+		result = receipt->result;
+		if (!result.sent() && weak) {
+			for (const auto id : receipt->progress.pending()) {
+				weak->uploader().cancel(id);
+			}
+		}
+	});
+	return result;
+}
+
 } // namespace
+
+void RunOnMain(FnMut<void()> callback) {
+	QMetaObject::invokeMethod(
+		QCoreApplication::instance(), std::move(callback), Qt::QueuedConnection);
+}
+
+void RunOnMainSync(FnMut<void()> callback) {
+	const auto application = QCoreApplication::instance();
+	if (QThread::currentThread() == application->thread()) {
+		callback();
+	} else {
+		QMetaObject::invokeMethod(application, std::move(callback), Qt::BlockingQueuedConnection);
+	}
+}
 
 QString pathForSave(not_null<Main::Session*> session) {
 	auto path = Core::App().settings().downloadPath();
@@ -299,32 +420,48 @@ qint64 fileSize(const QString &path) {
 DocumentPaths loadDocuments(
 		not_null<Main::Session*> session,
 		const std::vector<not_null<HistoryItem*>> &items,
-		const Fn<bool()> &cancelled) {
+		const Fn<bool()> &cancelled,
+		int concurrency) {
+	const auto load = [=](not_null<HistoryItem*> item) {
+		if ((cancelled && cancelled()) || !item->media()) {
+			return std::pair<DocumentData*, QString>();
+		}
+		if (const auto document = item->media()->document()) {
+			return std::make_pair(document, loadDocumentSync(
+				session,
+				document,
+				item->fullId(),
+				cancelled));
+		} else if (const auto photo = item->media()->photo()) {
+			if (fileSize(filePath(session, photo))
+				!= photo->imageByteSize(Data::PhotoSize::Large)) {
+				loadPhotoSync(session, photo, item->fullId(), cancelled);
+			}
+		}
+		return std::pair<DocumentData*, QString>();
+	};
 	auto result = DocumentPaths();
-	for (const auto &item : items) {
+	const auto add = [&](const std::pair<DocumentData*, QString> &loaded) {
+		if (loaded.first && !loaded.second.isEmpty()) {
+			result.emplace(loaded.first, loaded.second);
+		}
+	};
+	concurrency = std::clamp(concurrency, 1, 8);
+	for (auto i = size_t(0); i < items.size();) {
 		if (cancelled && cancelled()) {
 			break;
 		}
-		if (const auto data = item->media()->document()) {
-			const auto path = loadDocumentSync(
-				session,
-				data,
-				item->fullId(),
-				cancelled);
-			if (!path.isEmpty()) {
-				result.emplace(data, path);
-			}
-		} else if (auto photo = item->media()->photo()) {
-			if (fileSize(filePath(session, photo))
-					== photo->imageByteSize(Data::PhotoSize::Large)) {
-				continue;
-			}
-
-			loadPhotoSync(
-				session,
-				photo,
-				item->fullId(),
-				cancelled);
+		if (concurrency == 1) {
+			add(load(items[i++]));
+			continue;
+		}
+		auto pending = std::vector<
+			std::future<std::pair<DocumentData*, QString>>>();
+		for (auto j = 0; j < concurrency && i < items.size(); ++j, ++i) {
+			pending.push_back(std::async(std::launch::async, load, items[i]));
+		}
+		for (auto &future : pending) {
+			add(future.get());
 		}
 	}
 	return result;
@@ -402,7 +539,7 @@ QString loadDocumentSync(
 
 	const auto state = registration.state;
 	const auto documentId = data->id;
-	crl::on_main_sync([=] {
+	AyuSync::RunOnMainSync([=] {
 		data->save(origin, path);
 		state->allowSizeFallback = !data->loading();
 		if (!data->loading()) {
@@ -430,24 +567,39 @@ QString loadDocumentSync(
 	return FileHasExactSize(path, expectedSize) ? path : QString();
 }
 
-void forwardMessagesSync(not_null<Main::Session*> session,
-						 const std::vector<not_null<HistoryItem*>> &items,
-						 const ApiWrap::SendAction &action,
-						 Data::ForwardOptions options) {
-	auto latch = std::make_shared<TimedCountDownLatch>(1);
-
-	crl::on_main([=]
-	{
-		session->api().forwardMessages(Data::ResolvedForwardDraft(items, options),
-									   action,
-									   [=]
-									   {
-										   latch->countDown();
-									   });
+SendResult forwardMessagesSync(
+		not_null<Main::Session*> session,
+		const std::vector<not_null<HistoryItem*>> &items,
+		const ApiWrap::SendAction &action,
+		Data::ForwardOptions options,
+		Fn<bool()> cancelled) {
+	const auto receipt = std::make_shared<SendReceipt>();
+	const auto weak = base::make_weak(session);
+	AyuSync::RunOnMain([=] {
+		if (!weak || (cancelled && cancelled())) {
+			FinishSend(receipt, SendOutcome::Cancelled);
+			return;
+		}
+		session->data().sessionDataAboutToBeCleared() | rpl::on_next([=] {
+			FinishSend(receipt, SendOutcome::Cancelled);
+		}, receipt->lifetime);
+		session->api().forwardMessages(
+			Data::ResolvedForwardDraft(items, options),
+			action,
+			[=] {
+				if (!receipt->finished) {
+					receipt->result.confirmed = int(items.size());
+					FinishSend(receipt, SendOutcome::Sent);
+				}
+			},
+			[=](const MTP::Error &error) {
+				FinishSend(
+					receipt,
+					SendOutcome::Failed,
+					MTP::IgnoreError(error) ? QString() : error.type());
+			});
 	});
-
-
-	latch->await(std::chrono::minutes(1));
+	return AwaitSend(session, receipt, cancelled);
 }
 
 void loadPhotoSync(
@@ -463,7 +615,7 @@ void loadPhotoSync(
 	auto latch = std::make_shared<TimedCountDownLatch>(1);
 	auto lifetime = std::make_shared<rpl::lifetime>();
 
-	crl::on_main([=]
+	AyuSync::RunOnMain([=]
 	{
 		const auto view = photo->createMediaView();
 		if (!view) {
@@ -494,113 +646,137 @@ void loadPhotoSync(
 								  *lifetime);
 	});
 
-	(void)WaitForDownload(*latch, std::chrono::minutes(5), cancelled);
-	crl::on_main([lifetime = base::take(lifetime)]
+	if (WaitForDownload(*latch, std::chrono::minutes(5), cancelled)
+		== DownloadWaitResult::TimedOut) {
+		LOG(("AyuForward: photo download timed out."));
+	}
+	AyuSync::RunOnMainSync([lifetime = base::take(lifetime)]
 	{
 		lifetime->destroy();
 	});
 }
 
-void sendMessageSync(not_null<Main::Session*> session, Api::MessageToSend &&message) {
-	const auto action = message.action;
-	crl::on_main([=, message = std::move(message)]() mutable
-	{
-		// we cannot send events to objects
-		// owned by a different thread
-		// because sendMessage updates UI too
-
-		session->api().sendMessage(std::move(message));
-	});
-
-
-	waitForMsgSync(session, action);
-}
-
-void waitForMsgSync(not_null<Main::Session*> session, const Api::SendAction &action) {
-	auto latch = std::make_shared<TimedCountDownLatch>(1);
-	auto lifetime = std::make_shared<rpl::lifetime>();
-
-	crl::on_main([=]
-	{
-		session->data().itemIdChanged()
-			| rpl::filter([=](const Data::Session::IdChange &update)
-			{
-				return action.history->peer->id == update.newId.peer;
-			}) | rpl::on_next([=]
-									  {
-										  latch->countDown();
-									  },
-									  *lifetime);
-	});
-
-	latch->await(std::chrono::minutes(5));
-	crl::on_main([lifetime = base::take(lifetime)]
-	{
-		lifetime->destroy();
-	});
-}
-
-void sendDocumentSync(not_null<Main::Session*> session,
-					  Ui::PreparedGroup &group,
-					  SendMediaType type,
-					  TextWithTags &&caption,
-					  const Api::SendAction &action) {
-	auto groupId = std::make_shared<SendingAlbum>();
-	groupId->groupId = base::RandomValue<uint64>();
-
-	crl::on_main([=, lst = std::move(group.list), caption = std::move(caption)]() mutable
-	{
-		auto size = lst.files.size();
-		if (!lst.files.empty()) {
-			lst.files.front().caption = std::move(caption);
+SendResult sendMessageSync(
+		not_null<Main::Session*> session,
+		Api::MessageToSend &&message,
+		Fn<bool()> cancelled) {
+	const auto receipt = std::make_shared<SendReceipt>();
+	const auto weak = base::make_weak(session);
+	AyuSync::RunOnMain([=, message = std::move(message)]() mutable {
+		if (!weak || (cancelled && cancelled())) {
+			FinishSend(receipt, SendOutcome::Cancelled);
+			return;
 		}
+		ObserveSend(session, receipt);
+		session->api().sendMessage(std::move(message), std::nullopt, [=](FullMsgId id) {
+			MessageCreated(receipt, id);
+		});
+		receipt->progress.finishCreating();
+		if (!receipt->progress.expected()) {
+			FinishSend(receipt, SendOutcome::Failed);
+		} else {
+			CheckSend(receipt);
+		}
+	});
+	return AwaitSend(session, receipt, cancelled);
+}
+
+SendResult sendDocumentSync(
+		not_null<Main::Session*> session,
+		Ui::PreparedGroup &group,
+		SendMediaType type,
+		TextWithTags &&caption,
+		const Api::SendAction &action,
+		Fn<bool()> cancelled) {
+	const auto receipt = std::make_shared<SendReceipt>();
+	const auto weak = base::make_weak(session);
+	auto album = std::make_shared<SendingAlbum>();
+	album->groupId = base::RandomValue<uint64>();
+	AyuSync::RunOnMain([=, list = std::move(group.list), caption = std::move(caption)]() mutable {
+		if (!weak || (cancelled && cancelled())) {
+			FinishSend(receipt, SendOutcome::Cancelled);
+			return;
+		}
+		receipt->progress.expect(int(list.files.size()));
+		if (!receipt->progress.expected()) {
+			FinishSend(receipt, SendOutcome::Failed);
+			return;
+		}
+		ObserveSend(session, receipt);
+		list.files.front().caption = std::move(caption);
 		session->api().sendFiles(
-			std::move(lst),
+			std::move(list),
 			type,
-			size > 1 ? groupId : nullptr,
-			action);
+			receipt->progress.expected() > 1 ? album : nullptr,
+			action,
+			[=](FullMsgId id) { MessageCreated(receipt, id); },
+			[=] { return receipt->finished || (cancelled && cancelled()); },
+			[=] { FinishSend(receipt, SendOutcome::Failed, u"MEDIA_PREPARATION_FAILED"_q); });
 	});
-
-	waitForMsgSync(session, action);
+	return AwaitSend(session, receipt, cancelled);
 }
 
-void sendStickerSync(not_null<Main::Session*> session,
-					 Api::MessageToSend &&message,
-					 not_null<DocumentData*> document) {
-	const auto action = message.action;
-	crl::on_main([=, message = std::move(message)]() mutable
-	{
-		Api::SendExistingDocument(std::move(message), document, std::nullopt);
+SendResult sendStickerSync(
+		not_null<Main::Session*> session,
+		Api::MessageToSend &&message,
+		not_null<DocumentData*> document,
+		Fn<bool()> cancelled) {
+	const auto receipt = std::make_shared<SendReceipt>();
+	const auto weak = base::make_weak(session);
+	AyuSync::RunOnMain([=, message = std::move(message)]() mutable {
+		if (!weak || (cancelled && cancelled())) {
+			FinishSend(receipt, SendOutcome::Cancelled);
+			return;
+		}
+		ObserveSend(session, receipt);
+		receipt->progress.expect(1);
+		const auto id = FullMsgId(
+			message.action.history->peer->id,
+			session->data().nextLocalMessageId());
+		MessageCreated(receipt, id);
+		Api::SendExistingDocument(std::move(message), document, id.msg);
 	});
-
-	waitForMsgSync(session, action);
+	return AwaitSend(session, receipt, cancelled);
 }
 
-void sendVoiceSync(not_null<Main::Session*> session,
-				   const QByteArray &data,
-				   int64_t duration,
-				   bool video,
-				   Api::MessageToSend &&message) {
-	const auto action = message.action;
-
-	crl::on_main([=]
-	{
-		const auto to = FileLoadTo(
+SendResult sendVoiceSync(
+		not_null<Main::Session*> session,
+		const QByteArray &data,
+		int64_t duration,
+		bool video,
+		Api::MessageToSend &&message,
+		Fn<bool()> cancelled) {
+	const auto receipt = std::make_shared<SendReceipt>();
+	const auto weak = base::make_weak(session);
+	AyuSync::RunOnMain([=] {
+		if (!weak || (cancelled && cancelled())) {
+			FinishSend(receipt, SendOutcome::Cancelled);
+			return;
+		}
+		ObserveSend(session, receipt);
+		receipt->progress.expect(1);
+		const auto &action = message.action;
+		auto to = FileLoadTo(
 			action.history->peer->id,
 			action.options,
 			action.replyTo,
 			action.replaceMediaOf);
+		to.messageCreated = [=](FullMsgId id) { MessageCreated(receipt, id); };
+		to.cancelled = [=] { return receipt->finished || (cancelled && cancelled()); };
+		to.preparationFailed = [=] {
+			FinishSend(receipt, SendOutcome::Failed, u"MEDIA_PREPARATION_FAILED"_q);
+		};
 		session->api().fileLoader()->addTask(std::make_unique<FileLoadTask>(FileLoadTask::VoiceArgs{
 			.session = session,
 			.voice = data,
 			.duration = duration,
 			.waveform = QVector<signed char>(),
 			.video = video,
-			.to = to,
-			.caption = message.textWithTags
+			.to = std::move(to),
+			.caption = message.textWithTags,
 		}));
 	});
-	waitForMsgSync(session, action);
+	return AwaitSend(session, receipt, cancelled);
 }
 
 namespace {
@@ -656,8 +832,9 @@ UploadedFile uploadFileSync(not_null<Main::Session*> session,
 							const QString &path,
 							SendMediaType type,
 							bool forceFile,
-							const QString &displayName) {
-	if (path.isEmpty() || !QFile::exists(path)) {
+							const QString &displayName,
+							Fn<bool()> cancelled) {
+	if ((cancelled && cancelled()) || path.isEmpty() || !QFile::exists(path)) {
 		return {};
 	}
 
@@ -678,12 +855,18 @@ UploadedFile uploadFileSync(not_null<Main::Session*> session,
 	}
 
 	const auto info = std::make_shared<std::optional<Api::RemoteFileInfo>>();
+	const auto activeUpload = std::make_shared<FullMsgId>();
 	auto uploadLatch = std::make_shared<TimedCountDownLatch>(1);
 	auto lifetime = std::make_shared<rpl::lifetime>();
 
-	crl::on_main([=]
+	AyuSync::RunOnMain([=]
 	{
+		if (cancelled && cancelled()) {
+			uploadLatch->countDown();
+			return;
+		}
 		const auto uploadId = FullMsgId(peer->id, session->data().nextLocalMessageId());
+		*activeUpload = uploadId;
 		const auto ready = [=](const Storage::UploadedMedia &data)
 		{
 			if (data.fullId != uploadId) {
@@ -707,10 +890,15 @@ UploadedFile uploadFileSync(not_null<Main::Session*> session,
 		session->uploader().upload(uploadId, prepared);
 	});
 
-	const auto uploadFinished = uploadLatch->await(std::chrono::minutes(30));
-	crl::on_main([lifetime = base::take(lifetime)]
+	const auto uploadFinished = WaitForDownload(
+		*uploadLatch, std::chrono::minutes(30), cancelled)
+		== DownloadWaitResult::Completed;
+	AyuSync::RunOnMainSync([&]
 	{
 		lifetime->destroy();
+		if (!uploadFinished && activeUpload->msg) {
+			session->uploader().cancel(*activeUpload);
+		}
 	});
 
 	if (!uploadFinished || !info->has_value()) {
@@ -718,11 +906,16 @@ UploadedFile uploadFileSync(not_null<Main::Session*> session,
 	}
 
 	const auto result = std::make_shared<UploadedFile>();
+	auto api = std::make_shared<MTP::Sender>(&session->mtp());
 	auto mediaLatch = std::make_shared<TimedCountDownLatch>(1);
 
-	crl::on_main([=]
+	AyuSync::RunOnMain([=]
 	{
-		session->api().request(MTPmessages_UploadMedia(
+		if (cancelled && cancelled()) {
+			mediaLatch->countDown();
+			return;
+		}
+		api->request(MTPmessages_UploadMedia(
 			MTP_flags(0),
 			MTPstring(),
 			peer->input(),
@@ -753,19 +946,28 @@ UploadedFile uploadFileSync(not_null<Main::Session*> session,
 		}).send();
 	});
 
-	const auto mediaFinished = mediaLatch->await(std::chrono::minutes(5));
+	const auto mediaFinished = WaitForDownload(
+		*mediaLatch, std::chrono::minutes(5), cancelled)
+		== DownloadWaitResult::Completed;
+	AyuSync::RunOnMainSync([&] { api.reset(); });
 
 	return mediaFinished ? *result : UploadedFile();
 }
 
 std::shared_ptr<const Iv::RichPage> loadFullRichPageSync(
-	not_null<Main::Session*> session,
-	FullMsgId itemId) {
+		not_null<Main::Session*> session,
+		FullMsgId itemId,
+		Fn<bool()> cancelled) {
 	const auto resolved = std::make_shared<std::shared_ptr<const Iv::RichPage>>();
 	auto latch = std::make_shared<TimedCountDownLatch>(1);
+	auto api = std::make_shared<MTP::Sender>(&session->mtp());
 
-	crl::on_main([=]
+	AyuSync::RunOnMain([=]
 	{
+		if (cancelled && cancelled()) {
+			latch->countDown();
+			return;
+		}
 		const auto item = session->data().message(itemId);
 		if (!item) {
 			latch->countDown();
@@ -790,7 +992,7 @@ std::shared_ptr<const Iv::RichPage> loadFullRichPageSync(
 
 		const auto peer = item->history()->peer;
 
-		session->api().request(MTPmessages_GetRichMessage(
+		api->request(MTPmessages_GetRichMessage(
 			peer->input(),
 			MTP_int(itemId.msg)
 		)).done([=](const MTPmessages_Messages &result)
@@ -842,19 +1044,28 @@ std::shared_ptr<const Iv::RichPage> loadFullRichPageSync(
 		}).send();
 	});
 
-	const auto finished = latch->await(std::chrono::minutes(1));
+	const auto finished = WaitForDownload(
+		*latch, std::chrono::minutes(1), cancelled)
+		== DownloadWaitResult::Completed;
+	AyuSync::RunOnMainSync([&] { api.reset(); });
 
 	return finished ? *resolved : nullptr;
 }
 
 bool sendRichMessageSync(not_null<Main::Session*> session,
 						 const MTPInputRichMessage &richMessage,
-						 const Api::SendAction &action) {
+						 const Api::SendAction &action,
+						 Fn<bool()> cancelled) {
 	const auto sent = std::make_shared<bool>(false);
 	auto latch = std::make_shared<TimedCountDownLatch>(1);
+	auto api = std::make_shared<MTP::Sender>(&session->mtp());
 
-	crl::on_main([=]
+	AyuSync::RunOnMain([=]
 	{
+		if (cancelled && cancelled()) {
+			latch->countDown();
+			return;
+		}
 		auto sending = action;
 		sending.options.scheduled = 0;
 		sending.options.scheduleRepeatPeriod = 0;
@@ -887,7 +1098,7 @@ bool sendRichMessageSync(not_null<Main::Session*> session,
 			sendFlags |= Flag::f_allow_paid_stars;
 		}
 
-		session->api().request(MTPmessages_SendMessage(
+		api->request(MTPmessages_SendMessage(
 			MTP_flags(sendFlags),
 			peer->input(),
 			sending.mtpReplyTo(),
@@ -917,7 +1128,10 @@ bool sendRichMessageSync(not_null<Main::Session*> session,
 		}).send();
 	});
 
-	const auto finished = latch->await(std::chrono::minutes(2));
+	const auto finished = WaitForDownload(
+		*latch, std::chrono::minutes(2), cancelled)
+		== DownloadWaitResult::Completed;
+	AyuSync::RunOnMainSync([&] { api.reset(); });
 
 	return finished && *sent;
 }

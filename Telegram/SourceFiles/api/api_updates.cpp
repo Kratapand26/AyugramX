@@ -1717,6 +1717,7 @@ void Updates::feedUpdate(const MTPUpdate &update) {
 					if (existing && !local->mainView()) {
 						const auto history = local->history();
 						local->destroy();
+						session().data().notifyItemIdChange({ FullMsgId(id.peer, newId), id.msg });
 						history->requestChatListMessage();
 					} else {
 						if (existing) {

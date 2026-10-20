@@ -7,6 +7,7 @@
 #pragma once
 
 #include "apiwrap.h"
+#include "ayu/features/forward/ayu_forward_result.h"
 #include "base/flat_map.h"
 #include "base/random.h"
 #include "data/data_document.h"
@@ -24,6 +25,9 @@ struct RichPage;
 
 namespace AyuSync {
 
+void RunOnMain(FnMut<void()> callback);
+void RunOnMainSync(FnMut<void()> callback);
+
 using DocumentPaths = base::flat_map<not_null<DocumentData*>, QString>;
 
 struct UploadedFile
@@ -40,19 +44,25 @@ qint64 fileSize(const QString &path);
 [[nodiscard]] DocumentPaths loadDocuments(
 	not_null<Main::Session*> session,
 	const std::vector<not_null<HistoryItem*>> &items,
-	const Fn<bool()> &cancelled);
-void sendMessageSync(not_null<Main::Session*> session, Api::MessageToSend &&message);
+	const Fn<bool()> &cancelled,
+	int concurrency = 1);
+SendResult sendMessageSync(
+	not_null<Main::Session*> session,
+	Api::MessageToSend &&message,
+	Fn<bool()> cancelled = nullptr);
 
-void sendDocumentSync(not_null<Main::Session*> session,
-					  Ui::PreparedGroup &group,
-					  SendMediaType type,
-					  TextWithTags &&caption,
-					  const Api::SendAction &action);
-
-void sendStickerSync(not_null<Main::Session*> session,
-					 Api::MessageToSend &&message,
-					 not_null<DocumentData*> document);
-void waitForMsgSync(not_null<Main::Session*> session, const Api::SendAction &action);
+SendResult sendDocumentSync(
+	not_null<Main::Session*> session,
+	Ui::PreparedGroup &group,
+	SendMediaType type,
+	TextWithTags &&caption,
+	const Api::SendAction &action,
+	Fn<bool()> cancelled = nullptr);
+SendResult sendStickerSync(
+	not_null<Main::Session*> session,
+	Api::MessageToSend &&message,
+	not_null<DocumentData*> document,
+	Fn<bool()> cancelled = nullptr);
 void loadPhotoSync(
 	not_null<Main::Session*> session,
 	not_null<PhotoData*> photo,
@@ -63,28 +73,37 @@ void loadPhotoSync(
 	not_null<DocumentData*> document,
 	Data::FileOrigin origin,
 	const Fn<bool()> &cancelled);
-void forwardMessagesSync(not_null<Main::Session*> session,
-						 const std::vector<not_null<HistoryItem*>> &items,
-						 const ApiWrap::SendAction &action,
-						 Data::ForwardOptions options);
-void sendVoiceSync(not_null<Main::Session*> session,
-				   const QByteArray &data,
-				   int64_t duration,
-				   bool video,
-				   Api::MessageToSend &&message);
-
-UploadedFile uploadFileSync(not_null<Main::Session*> session,
-							not_null<PeerData*> peer,
-							const QString &path,
-							SendMediaType type,
-							bool forceFile,
-							const QString &displayName = {});
+SendResult forwardMessagesSync(
+	not_null<Main::Session*> session,
+	const std::vector<not_null<HistoryItem*>> &items,
+	const ApiWrap::SendAction &action,
+	Data::ForwardOptions options,
+	Fn<bool()> cancelled = nullptr);
+SendResult sendVoiceSync(
+	not_null<Main::Session*> session,
+	const QByteArray &data,
+	int64_t duration,
+	bool video,
+	Api::MessageToSend &&message,
+	Fn<bool()> cancelled = nullptr);
+UploadedFile uploadFileSync(
+	not_null<Main::Session*> session,
+	not_null<PeerData*> peer,
+	const QString &path,
+	SendMediaType type,
+	bool forceFile,
+	const QString &displayName = {},
+	Fn<bool()> cancelled = nullptr);
 
 std::shared_ptr<const Iv::RichPage> loadFullRichPageSync(
 	not_null<Main::Session*> session,
-	FullMsgId itemId);
+	FullMsgId itemId,
+	Fn<bool()> cancelled = nullptr);
 
-bool sendRichMessageSync(not_null<Main::Session*> session,
-						 const MTPInputRichMessage &richMessage,
-						 const Api::SendAction &action);
+bool sendRichMessageSync(
+	not_null<Main::Session*> session,
+	const MTPInputRichMessage &richMessage,
+	const Api::SendAction &action,
+	Fn<bool()> cancelled = nullptr);
+
 } // namespace AyuSync

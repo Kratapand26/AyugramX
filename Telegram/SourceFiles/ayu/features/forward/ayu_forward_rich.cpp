@@ -127,7 +127,7 @@ void collectMedia(not_null<Main::Session*> session, const std::vector<Block> &bl
 				return AyuSync::UploadedFile();
 			}
 		}
-		return AyuSync::uploadFileSync(session, peer, path, type, forceFile);
+		return AyuSync::uploadFileSync(session, peer, path, type, forceFile, {}, cancelled);
 	};
 
 	for (const auto &[id, photo] : source.photos) {
@@ -180,7 +180,8 @@ void collectMedia(not_null<Main::Session*> session, const std::vector<Block> &bl
 				path,
 				SendMediaType::File,
 				!playable,
-				AyuSync::documentFileName(document));
+				AyuSync::documentFileName(document),
+				cancelled);
 		}
 		if (uploaded.document) {
 			result.documents.emplace(id, uploaded.document);
@@ -190,16 +191,6 @@ void collectMedia(not_null<Main::Session*> session, const std::vector<Block> &bl
 	}
 
 	return result;
-}
-
-[[nodiscard]] bool runOnMainSync(Fn<void()> callback) {
-	auto latch = std::make_shared<TimedCountDownLatch>(1);
-	crl::on_main([latch, callback = std::move(callback)]
-	{
-		callback();
-		latch->countDown();
-	});
-	return latch->await(std::chrono::minutes(1));
 }
 
 void sanitizeRichText(Iv::RichPage::RichText &text) {
@@ -385,7 +376,7 @@ bool forwardRichMessage(
 		};
 	}
 
-	const auto source = AyuSync::loadFullRichPageSync(session, itemId);
+	const auto source = AyuSync::loadFullRichPageSync(session, itemId, cancelled);
 	if (!source || cancelled()) {
 		return false;
 	}
@@ -398,7 +389,7 @@ bool forwardRichMessage(
 	};
 	const auto prepared = std::make_shared<PrepareState>();
 
-	const auto preparedOk = runOnMainSync([=]
+	AyuSync::RunOnMainSync([=]
 	{
 		prepared->page = *source;
 		prepared->page.part = false;
@@ -409,7 +400,7 @@ bool forwardRichMessage(
 			collectMedia(session, prepared->page.blocks, prepared->media);
 		}
 	});
-	if (!preparedOk || prepared->premiumBlocked || cancelled()) {
+	if (prepared->premiumBlocked || cancelled()) {
 		return false;
 	}
 
@@ -419,12 +410,13 @@ bool forwardRichMessage(
 		itemId,
 		prepared->media,
 		cancelled);
-	if (cancelled()) {
+	if (cancelled() || uploaded.photos.size() != prepared->media.photos.size()
+		|| uploaded.documents.size() != prepared->media.documents.size()) {
 		return false;
 	}
 
 	const auto serialized = std::make_shared<std::optional<MTPInputRichMessage>>();
-	const auto serializedOk = runOnMainSync([=]
+	AyuSync::RunOnMainSync([=]
 	{
 		pruneBlocks(session, prepared->page.blocks, uploaded);
 		if (prepared->page.blocks.empty()) {
@@ -438,11 +430,11 @@ bool forwardRichMessage(
 			*serialized = result.value;
 		}
 	});
-	if (!serializedOk || !serialized->has_value() || cancelled()) {
+	if (!serialized->has_value() || cancelled()) {
 		return false;
 	}
 
-	return AyuSync::sendRichMessageSync(session, **serialized, action);
+	return AyuSync::sendRichMessageSync(session, **serialized, action, cancelled);
 }
 
 } // namespace AyuForward

@@ -1304,6 +1304,9 @@ void FileLoadTask::process(ProcessArgs &&args) {
 }
 
 void FileLoadTask::finish() {
+	if (_to.cancelled && _to.cancelled()) {
+		return;
+	}
 	const auto session = _session.get();
 	if (!session) {
 		return;
@@ -1315,12 +1318,18 @@ void FileLoadTask::finish() {
 				? tr::lng_folder_archive_failed(tr::now)
 				: tr::lng_send_image_empty(tr::now, lt_name, _filepath)),
 			Ui::LayerOption::KeepOther);
+		if (_to.preparationFailed) {
+			_to.preparationFailed();
+		}
 		removeFromAlbum();
 	} else if (_result->filesize > kFileSizePremiumLimit
 		|| (_result->filesize > kFileSizeLimit && !premium)) {
 		Ui::show(
 			Box(FileSizeLimitBox, session, _result->filesize, nullptr),
 			Ui::LayerOption::KeepOther);
+		if (_to.preparationFailed) {
+			_to.preparationFailed();
+		}
 		removeFromAlbum();
 	} else if (_album && _album->preparedMusicBatching()) {
 		const auto it = ranges::find(_album->items, id(), &SendingAlbum::Item::taskId);

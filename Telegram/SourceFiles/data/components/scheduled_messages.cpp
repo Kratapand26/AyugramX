@@ -402,7 +402,13 @@ void ScheduledMessages::apply(
 	auto &list = i->second;
 	const auto j = list.itemById.find(id);
 	if (j != end(list.itemById) || !IsServerMsgId(id)) {
+		const auto previous = local->fullId();
+		const auto replacement = (j != end(list.itemById) && IsServerMsgId(id))
+			? j->second->fullId() : FullMsgId();
 		_session->data().destroyMessageWithCacheCleanup(local);
+		if (replacement.msg) {
+			_session->data().notifyItemIdChange({ replacement, previous.msg });
+		}
 	} else {
 		Assert(!list.itemById.contains(local->id));
 		local->setRealId(localMessageId(id));

@@ -241,12 +241,14 @@ set(ayugram_files
         ayu/features/message_shot/message_shot_theme_state.h
         ayu/features/forward/ayu_forward.cpp
         ayu/features/forward/ayu_forward.h
+        ayu/features/forward/ayu_forward_result.h
         ayu/features/forward/ayu_forward_rich.cpp
         ayu/features/forward/ayu_forward_rich.h
         ayu/features/forward/ayu_sync.cpp
         ayu/features/forward/ayu_sync.h
         ayu/features/forward/forwarder_engine.cpp
         ayu/features/forward/forwarder_engine.h
+        ayu/features/forward/forwarder_progress.h
         ayu/features/forward/forwarder_log.cpp
         ayu/features/forward/forwarder_log.h
         ayu/features/forward/forwarder_state.cpp
