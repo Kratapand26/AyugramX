@@ -537,10 +537,10 @@ bool ForwarderEngine::processSource(
 		for (const auto item : items) {
 			ids.push_back(item->id.bare);
 		}
-		auto progress = AyuForwarder::BatchProgress(std::move(ids), lastProcessed);
+		auto batchProgress = AyuForwarder::BatchProgress(std::move(ids), lastProcessed);
 		const auto complete = [&](not_null<HistoryItem*> item) {
-			progress.complete(item->id.bare);
-			lastProcessed = progress.lastProcessedId();
+			batchProgress.complete(item->id.bare);
+			lastProcessed = batchProgress.lastProcessedId();
 			saveProgress();
 		};
 		auto groups = std::vector<std::vector<not_null<HistoryItem*>>>();
