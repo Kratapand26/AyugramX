@@ -10,6 +10,7 @@
 #include "ayu/features/forward/forwarder_log.h"
 #include "ayu/features/forward/forwarder_state.h"
 #include "ayu/features/forward/ayu_forward.h"
+#include "base/weak_ptr.h"
 #include "data/data_peer.h"
 #include "data/data_channel.h"
 #include "data/data_forum_topic.h"
@@ -865,9 +866,11 @@ void ForwarderBox::startForwarding() {
 
 	auto *engine = new ForwarderEngine(engineConfig);
 	QObject::connect(engine, &ForwarderEngine::finished, engine, &QObject::deleteLater);
-	const auto controller = _controller;
-	QObject::connect(engine, &ForwarderEngine::error, controller.get(), [=](const QString &message) {
-		controller->showToast(message);
+	const auto weak = base::make_weak(_controller);
+	QObject::connect(engine, &ForwarderEngine::error, engine, [=](const QString &message) {
+		if (weak) {
+			weak->showToast(message);
+		}
 	});
 	if (!engine->start()) {
 		delete engine;
